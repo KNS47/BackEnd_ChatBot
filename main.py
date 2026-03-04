@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from middleware import limiter, rate_limit_handler
@@ -11,6 +11,12 @@ app = FastAPI()
 @app.get("/")
 def health():
     return {"status": "ok"}
+
+@app.get("/api/check-admin")
+def check_admin(request: Request):
+    if request.session.get("admin"):
+        return {"authenticated": True}
+    return {"authenticated": False}
 
 app.add_middleware(
     SessionMiddleware,
