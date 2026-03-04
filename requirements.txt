@@ -1,5 +1,5 @@
 fastapi
-uvicorn
+uvicorn[standard]
 python-dotenv
 supabase
 google-generativeai
@@ -8,3 +8,5 @@ python-multipart
 python-jose
 passlib[bcrypt]
 itsdangerous
+slowapi
+httpx
