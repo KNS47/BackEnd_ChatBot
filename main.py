@@ -1,10 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
-
-from config import SESSION_SECRET
 from middleware import limiter, rate_limit_handler
 from slowapi.errors import RateLimitExceeded
+from config import SESSION_SECRET, FRONTEND_URL
 
 from routes import auth, chat, pdf, analytics
 
@@ -20,7 +19,7 @@ app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["FRONTEND_URL"],  # เปลี่ยนเป็น URL ของ frontend
+    allow_origins=[FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

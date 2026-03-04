@@ -12,6 +12,8 @@ API_KEYS = os.getenv("GEMINI_API_KEYS", "").split(",")
 ADMIN_USER = os.getenv("ADMIN_USERNAME")
 ADMIN_PASS = os.getenv("ADMIN_PASSWORD")
 
+FRONTEND_URL = os.getenv("FRONTEND_URL")
+
 SESSION_SECRET = os.getenv("SESSION_SECRET")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
