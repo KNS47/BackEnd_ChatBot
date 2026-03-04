@@ -8,6 +8,9 @@ from config import SESSION_SECRET, FRONTEND_URL
 from routes import auth, chat, pdf, analytics
 
 app = FastAPI()
+@app.get("/")
+def health():
+    return {"status": "ok"}
 
 app.add_middleware(
     SessionMiddleware,
