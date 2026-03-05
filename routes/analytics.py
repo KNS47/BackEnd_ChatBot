@@ -11,42 +11,40 @@ router = APIRouter()
 # -----------------------
 # Summary Dashboard
 # -----------------------
-@router.get("/analytics/summary")
-def get_summary():
+@router.get("/analytics/summary", dependencies=[Depends(verify_admin)])
+async def analytics_summary():
+
+    q = supabase.table("chat_analytics").select("category, created_at").execute()
+    sessions = supabase.table("chat_sessions").select("id, created_at").execute()
+
+    data = q.data or []
+    session_data = sessions.data or []
 
     today = datetime.utcnow().date()
-    tomorrow = today + timedelta(days=1)
 
-    # คำถามวันนี้
-    q = supabase.table("chat_logs")\
-        .select("id", count="exact")\
-        .gte("created_at", today.isoformat())\
-        .lt("created_at", tomorrow.isoformat())\
-        .execute()
+    today_questions = [
+        r for r in data
+        if r.get("created_at") and
+        datetime.fromisoformat(r["created_at"].replace("Z","+00:00")).date() == today
+    ]
 
-    total_questions = q.count or 0
+    today_users = {
+        r["id"]
+        for r in session_data
+        if r.get("created_at") and
+        datetime.fromisoformat(
+            r["created_at"].replace("Z","+00:00")
+        ).date() == today
+    }
 
-    # ผู้ใช้วันนี้ (distinct)
-    users = supabase.table("chat_logs")\
-        .select("session_id")\
-        .gte("created_at", today.isoformat())\
-        .lt("created_at", tomorrow.isoformat())\
-        .execute()
-
-    unique_users = len(set([u["session_id"] for u in users.data]))
-
-    # หมวดหมู่
-    cats = supabase.table("documents")\
-        .select("category")\
-        .execute()
-
-    categories = len(set([c["category"] for c in cats.data]))
+    categories = set([r["category"] for r in data if r.get("category")])
 
     return {
-        "total_questions": total_questions,
-        "total_users": unique_users,
-        "total_categories": categories
+        "total_questions": len(today_questions),
+        "total_users": len(today_users),
+        "total_categories": len(categories)
     }
+
 
 # -----------------------
 # Questions Trend (7 days)
