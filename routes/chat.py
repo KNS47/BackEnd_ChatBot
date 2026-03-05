@@ -171,11 +171,25 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
 
         result = supabase.rpc("match_documents", {
             "query_embedding": question_embedding,
-            "match_threshold": 0.5,
+            "match_threshold": 0.7,
             "match_count": 5
         }).execute()
 
         matches = result.data
+        if not matches:
+            resp = JSONResponse({
+                "answer": "ขออภัยค่ะ ไม่พบข้อมูลในเอกสารที่เกี่ยวข้องกับคำถามนี้"
+            })
+
+            resp.set_cookie(
+                key="session_id",
+                value=session_id,
+                httponly=True,
+                secure=True,
+                samesite="none"
+            )
+
+            return resp
         categories = list(set([
             m["category"] for m in matches if m.get("category")
         ]))
