@@ -19,7 +19,7 @@ if not os.path.exists(UPLOAD_DIR):
 # -----------------------
 # Upload PDF
 # -----------------------
-@router.post("/pdf/upload", dependencies=[Depends(verify_admin)])
+@router.post("/upload-pdf", dependencies=[Depends(verify_admin)])
 async def upload_pdf(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
@@ -48,7 +48,7 @@ async def upload_pdf(
 # -----------------------
 # List PDFs (distinct source)
 # -----------------------
-@router.get("/pdf/list", dependencies=[Depends(verify_admin)])
+@router.get("/pdfs", dependencies=[Depends(verify_admin)])
 async def list_pdfs():
 
     result = supabase.table("documents") \
