@@ -177,10 +177,19 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
 
         matches = result.data
         if not matches:
-            resp = JSONResponse({
-                "answer": "ขออภัยค่ะ ไม่พบข้อมูลในเอกสารที่เกี่ยวข้องกับคำถามนี้"
-            })
+            # ตรวจว่าเป็นคำทักทาย/สนทนาทั่วไปหรือเปล่า
+            greeting_check = generate_answer(
+                f"""ประโยคนี้เป็นคำทักทาย กล่าวลา หรือสนทนาทั่วไป (เช่น สวัสดี ขอบคุณ ทำไรได้บ้าง) ใช่หรือไม่?\nตอบแค่ YES หรือ NO\nประโยค: {question}"""
+            ).strip().upper()
 
+            if greeting_check.startswith("YES"):
+                answer = generate_answer(
+                    f"""คุณคือแชทบอทเทศบาล เป็นบอทผู้หญิงที่คอยช่วยตอบคำถามให้กับประชาชน\nตอบคำทักทายหรือสนทนาทั่วไปนี้อย่างสุภาพ เป็นมิตร และแนะนำว่าสามารถช่วยตอบคำถามเกี่ยวกับข้อมูลเทศบาลได้\nไม่ต้องสวัสดีซ้ำถ้าทักทายไปแล้ว\nคำถาม: {question}"""
+                )
+            else:
+                answer = "ขออภัยค่ะ ไม่พบข้อมูลในเอกสารที่เกี่ยวข้องกับคำถามนี้ หากต้องการสอบถามเพิ่มเติม สามารถติดต่อเจ้าหน้าที่เทศบาลได้โดยตรงค่ะ"
+
+            resp = JSONResponse({"answer": answer})
             resp.set_cookie(
                 key="session_id",
                 value=session_id,
@@ -188,7 +197,6 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
                 secure=True,
                 samesite="none"
             )
-
             return resp
         categories = list(set([
             m["category"] for m in matches if m.get("category")
@@ -215,7 +223,6 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
 - ห้ามแต่งข้อมูลที่ไม่มีในข้อมูลเอกสาร
 - ถ้าไม่มีข้อมูลจริง ๆ ให้ตอบว่า ไม่พบข้อมูล
 - ตอบเป็น Markdown ได้ (ใช้ ตัวหนา, ถ้าเป็นรายการใช้ - ได้)
-- ตอบให้อ่านง่าย เป็นบุลเลตก็ได้
 
 ข้อมูลเอกสาร:
 {context}
