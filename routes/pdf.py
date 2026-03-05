@@ -74,29 +74,10 @@ async def list_pdfs():
 # View PDF
 # -----------------------
 
-@router.get("/pdfs/{filename}", dependencies=[Depends(verify_admin)])
-async def view_pdf(filename: str):
-
-    filename = unquote(filename)   # ⭐ สำคัญมาก
-
-    file_path = os.path.join(UPLOAD_DIR, filename)
-
-    if not os.path.exists(file_path):
-        return JSONResponse(status_code=404, content={"error": "ไม่พบไฟล์"})
-
-    return FileResponse(
-        file_path,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'inline; filename="{filename}"'
-        }
-    )
-
-# -----------------------
-# Download PDF
-# -----------------------
 @router.get("/pdfs/download/{filename}", dependencies=[Depends(verify_admin)])
 async def download_pdf(filename: str):
+
+    filename = unquote(filename)
 
     file_path = os.path.join(UPLOAD_DIR, filename)
 
@@ -108,6 +89,29 @@ async def download_pdf(filename: str):
         media_type="application/pdf",
         filename=filename
     )
+
+
+# -----------------------
+# Delete PDF
+# -----------------------
+@router.delete("/pdf/{filename}", dependencies=[Depends(verify_admin)])
+async def delete_pdf(filename: str):
+
+    filename = unquote(filename)
+
+    file_path = os.path.join(UPLOAD_DIR, filename)
+
+    # ลบ embeddings
+    supabase.table("documents") \
+        .delete() \
+        .eq("source", filename) \
+        .execute()
+
+    # ลบไฟล์จริง
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
+    return {"message": f"ลบเอกสาร {filename} สำเร็จ"}
 
 # -----------------------
 # Delete PDF (by source)
