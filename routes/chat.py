@@ -166,13 +166,26 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
         rewritten_question = question
 
         if history_text:
-            rewrite_prompt = f"""จากบทสนทนานี้:
+            rewrite_prompt = f"""คุณคือผู้ช่วยที่เชี่ยวชาญการทำความเข้าใจบทสนทนา
+งานของคุณคือเขียนคำถามล่าสุดใหม่ให้ครบถ้วนและค้นหาได้ โดยใส่ context จากบทสนทนาก่อนหน้าเข้าไปด้วย
+
+กติกา:
+- ตอบเป็นคำถามเดียว ไม่ต้องอธิบาย
+- เก็บความหมายเดิมไว้ครบ อย่าเปลี่ยนความหมาย
+- ถ้าคำถามอ้างถึง "เขา" "นั้น" "ที่พูดถึง" ให้ระบุชื่อ/สิ่งนั้นให้ชัดเจน
+- ถ้าคำถามชัดเจนอยู่แล้ว ให้คืนคำถามเดิม
+
+บทสนทนาก่อนหน้า:
 {history_text}
 
-เขียนคำถามล่าสุดใหม่ให้ชัดเจน:
-{question}"""
+คำถามล่าสุด: {question}
 
-            rewritten_question = generate_answer(rewrite_prompt)
+คำถามที่เขียนใหม่:"""
+
+            rewritten_question = generate_answer(rewrite_prompt).strip()
+            # ถ้า rewrite ออกมายาวผิดปกติ หรือดูไม่เหมือนคำถาม ให้ใช้ต้นฉบับ
+            if len(rewritten_question) > 300 or "\n" in rewritten_question:
+                rewritten_question = question
 
         # -----------------------
         # RAG
@@ -194,7 +207,7 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
 
             if greeting_check.startswith("YES"):
                 answer = generate_answer(
-                    f"""คุณคือแชทบอทเทศบาล เป็นบอทผู้หญิงที่คอยช่วยตอบคำถามให้กับประชาชน\nตอบคำทักทายหรือสนทนาทั่วไปนี้อย่างสุภาพ เป็นมิตร และแนะนำว่าสามารถช่วยตอบคำถามเกี่ยวกับข้อมูลเทศบาลได้\nไม่ต้องสวัสดีซ้ำถ้าทักทายไปแล้ว\nคำถาม: {question}"""
+                    f"""คุณคือแชทบอทเทศบาล เป็นบอทผู้หญิงที่คอยช่วยตอบคำถามให้กับประชาชน\nตอบคำทักทายหรือสนทนาทั่วไปนี้อย่างสุภาพ เป็นมิตร และแนะนำว่าสามารถช่วยตอบคำถามเกี่ยวกับข้อมูลเทศบาลได้\nไม่ต้องสวัสดีซ้ำถ้าทักทายไปแล้ว\nคำถาม: {rewritten_question}"""
                 )
             else:
                 answer = "ขออภัยค่ะ ไม่พบข้อมูลในเอกสารที่เกี่ยวข้องกับคำถามนี้ หากต้องการสอบถามเพิ่มเติม สามารถติดต่อเจ้าหน้าที่เทศบาลได้โดยตรงค่ะ"
@@ -246,7 +259,7 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
 5. ห้ามตอบเรื่องศาสนา การเมือง พระมหากษัตริย์
 6. ถ้าไม่มีข้อมูลจริง ๆ ให้ตอบว่า ไม่พบข้อมูล
 
-คำถาม: {question}"""
+คำถาม: {rewritten_question}"""
 
         answer = generate_answer(prompt)
 
