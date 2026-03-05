@@ -7,13 +7,27 @@ from routes.auth import verify_admin
 
 router = APIRouter()
 
+def parse_dt(ts: str) -> "datetime":
+    """แก้ปัญหา Python 3.10 ไม่รองรับ microseconds ที่ไม่ครบ 6 หลัก"""
+    ts = ts.replace("Z", "+00:00")
+    if "." in ts:
+        dot_idx = ts.index(".")
+        plus_idx = ts.find("+", dot_idx)
+        frac = ts[dot_idx+1:plus_idx if plus_idx != -1 else len(ts)]
+        frac = frac.ljust(6, "0")[:6]
+        tz = ts[plus_idx:] if plus_idx != -1 else ""
+        ts = ts[:dot_idx+1] + frac + tz
+    return datetime.fromisoformat(ts)
+
 
 # -----------------------
 # Summary Dashboard
 # -----------------------
 @router.get("/analytics/summary", dependencies=[Depends(verify_admin)])
-async def analytics_summary():
-
+async def analytics_summary(
+    start: str = Query(None),
+    end: str = Query(None)
+):
     q = supabase.table("chat_analytics").select("category, created_at").execute()
     sessions = supabase.table("chat_sessions").select("id, created_at").execute()
 
@@ -22,26 +36,31 @@ async def analytics_summary():
 
     today = datetime.utcnow().date()
 
-    today_questions = [
+    # ถ้าไม่ได้เลือก filter ให้ใช้วันนี้ ถ้าเลือกให้ใช้ช่วงที่เลือก
+    try:
+        date_start = datetime.strptime(start, "%Y-%m-%d").date() if start else today
+        date_end = datetime.strptime(end, "%Y-%m-%d").date() if end else today
+    except ValueError:
+        date_start = date_end = today
+
+    filtered_questions = [
         r for r in data
         if r.get("created_at") and
-        datetime.fromisoformat(r["created_at"].replace("Z","+00:00")).date() == today
+        date_start <= parse_dt(r["created_at"]).date() <= date_end
     ]
 
-    today_users = {
+    filtered_users = {
         r["id"]
         for r in session_data
         if r.get("created_at") and
-        datetime.fromisoformat(
-            r["created_at"].replace("Z","+00:00")
-        ).date() == today
+        date_start <= parse_dt(r["created_at"]).date() <= date_end
     }
 
     categories = set([r["category"] for r in data if r.get("category")])
 
     return {
-        "total_questions": len(today_questions),
-        "total_users": len(today_users),
+        "total_questions": len(filtered_questions),
+        "total_users": len(filtered_users),
         "total_categories": len(categories)
     }
 
@@ -66,9 +85,7 @@ async def last7days():
         if not r.get("created_at"):
             continue
 
-        d = datetime.fromisoformat(
-            r["created_at"].replace("Z","+00:00")
-        ).date()
+        d = parse_dt(r["created_at"]).date()
 
         if d in counts:
             counts[d] += 1
@@ -98,9 +115,7 @@ async def users_per_day():
         if not r.get("created_at"):
             continue
 
-        d = datetime.fromisoformat(
-            r["created_at"].replace("Z","+00:00")
-        ).date()
+        d = parse_dt(r["created_at"]).date()
 
         if d in counts:
             counts[d] += 1

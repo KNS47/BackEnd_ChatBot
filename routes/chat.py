@@ -16,6 +16,18 @@ router = APIRouter()
 
 response_cache = {}
 
+def parse_dt(ts: str) -> "datetime":
+    """แก้ปัญหา Python 3.10 ไม่รองรับ microseconds ที่ไม่ครบ 6 หลัก"""
+    ts = ts.replace("Z", "+00:00")
+    if "." in ts:
+        dot_idx = ts.index(".")
+        plus_idx = ts.find("+", dot_idx)
+        frac = ts[dot_idx+1:plus_idx if plus_idx != -1 else len(ts)]
+        frac = frac.ljust(6, "0")[:6]
+        tz = ts[plus_idx:] if plus_idx != -1 else ""
+        ts = ts[:dot_idx+1] + frac + tz
+    return datetime.fromisoformat(ts)
+
 # -----------------------
 # Chat History
 # -----------------------
@@ -56,9 +68,7 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
             .execute()
 
         if last_msg.data:
-            last_time = datetime.fromisoformat(
-                last_msg.data[0]["created_at"].replace('Z', '+00:00')
-            )
+            last_time = parse_dt(last_msg.data[0]["created_at"])
             if now - last_time.replace(tzinfo=None) > timedelta(minutes=10):
                 session_id = None
 
