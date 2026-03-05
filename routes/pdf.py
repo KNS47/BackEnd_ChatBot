@@ -100,7 +100,9 @@ async def delete_pdf(filename: str):
     filename = unquote(filename)
 
     file_path = os.path.join(UPLOAD_DIR, filename)
-
+    print("FILE:", filename)
+    print("PATH:", file_path)
+    print("EXIST:", os.path.exists(file_path))
     # ลบ embeddings
     supabase.table("documents") \
         .delete() \
@@ -112,6 +114,7 @@ async def delete_pdf(filename: str):
         os.remove(file_path)
 
     return {"message": f"ลบเอกสาร {filename} สำเร็จ"}
+
 
 # -----------------------
 # Delete PDF (by source)
