@@ -73,10 +73,12 @@ async def list_pdfs():
 # -----------------------
 # View PDF
 # -----------------------
+
 @router.get("/pdfs/{filename}", dependencies=[Depends(verify_admin)])
 async def view_pdf(filename: str):
 
-    filename = unquote(filename)
+    filename = unquote(filename)   # ⭐ สำคัญมาก
+
     file_path = os.path.join(UPLOAD_DIR, filename)
 
     if not os.path.exists(file_path):
@@ -85,9 +87,10 @@ async def view_pdf(filename: str):
     return FileResponse(
         file_path,
         media_type="application/pdf",
-        filename=filename
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"'
+        }
     )
-
 
 # -----------------------
 # Download PDF
@@ -95,7 +98,6 @@ async def view_pdf(filename: str):
 @router.get("/pdfs/download/{filename}", dependencies=[Depends(verify_admin)])
 async def download_pdf(filename: str):
 
-    filename = unquote(filename)
     file_path = os.path.join(UPLOAD_DIR, filename)
 
     if not os.path.exists(file_path):
