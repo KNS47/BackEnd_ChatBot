@@ -10,3 +10,5 @@ passlib[bcrypt]
 itsdangerous
 slowapi
 httpx
+pymupdf
+pdfplumber

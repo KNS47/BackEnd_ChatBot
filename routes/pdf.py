@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, Depends
-from fastapi.responses import JSONResponse,FileResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from typing import List
 import os
 import uuid
@@ -11,10 +11,7 @@ from routes.auth import verify_admin
 
 router = APIRouter()
 
-UPLOAD_DIR = "uploads"
-
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR)
+BUCKET_NAME = "pdfs"  # ชื่อ bucket ใน Supabase Storage
 
 
 # -----------------------
@@ -26,34 +23,44 @@ async def upload_pdf(
     file: UploadFile = File(...),
     category: str = Form(...)
 ):
-
     if not file.filename.endswith(".pdf"):
         return {"error": "รองรับเฉพาะไฟล์ PDF เท่านั้น"}
 
-    unique_name = f"{uuid.uuid4()}_{file.filename}"
-    file_path = os.path.join(UPLOAD_DIR, unique_name)
+    original_name = file.filename                          # ชื่อที่แสดงให้ user เห็น
+    unique_name = f"{uuid.uuid4()}.pdf"                    # ชื่อจริงใน storage (UUID เท่านั้น)
 
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
+    file_bytes = await file.read()
 
+    # อัปโหลดขึ้น Supabase Storage
+    upload_res = supabase.storage.from_(BUCKET_NAME).upload(
+        path=unique_name,
+        file=file_bytes,
+        file_options={"content-type": "application/pdf"}
+    )
+
+    if hasattr(upload_res, "error") and upload_res.error:
+        return JSONResponse(status_code=500, content={"error": "อัปโหลดไฟล์ไม่สำเร็จ"})
+
+    # เก็บ mapping: unique_name (storage key) <-> original_name (display)
     background_tasks.add_task(
         process_pdf_background,
-        file_path,
-        unique_name,
-        category
+        file_bytes,        # ส่ง bytes แทน path
+        unique_name,       # storage key (UUID)
+        category,
+        original_name      # ชื่อที่แสดง — process_pdf_background ต้องรับ param นี้เพิ่ม
     )
 
     return {"message": "อัปโหลดสำเร็จ กำลังประมวลผล..."}
 
 
 # -----------------------
-# List PDFs (distinct source)
+# List PDFs
 # -----------------------
 @router.get("/pdfs", dependencies=[Depends(verify_admin)])
 async def list_pdfs():
 
     result = supabase.table("documents") \
-        .select("source, category") \
+        .select("source, original_name, category") \
         .execute()
 
     if not result.data:
@@ -61,34 +68,36 @@ async def list_pdfs():
 
     seen = {}
     for row in result.data:
-        seen[row["source"]] = row["category"]
+        key = row["source"]
+        if key not in seen:
+            seen[key] = {
+                "source": key,
+                "original_name": row.get("original_name") or key,  # fallback
+                "category": row["category"]
+            }
 
-    files = [
-        {"source": k, "category": v}
-        for k, v in seen.items()
-    ]
+    return {"files": list(seen.values())}
 
-    return {"files": files}
 
 # -----------------------
-# View PDF
+# View / Download PDF  (redirect ไป Supabase signed URL)
 # -----------------------
-
 @router.get("/pdfs/download/{filename}", dependencies=[Depends(verify_admin)])
 async def download_pdf(filename: str):
 
     filename = unquote(filename)
 
-    file_path = os.path.join(UPLOAD_DIR, filename)
+    # สร้าง signed URL อายุ 60 วินาที
+    signed = supabase.storage.from_(BUCKET_NAME).create_signed_url(
+        path=filename,
+        expires_in=60
+    )
 
-    if not os.path.exists(file_path):
+    if not signed or not signed.get("signedURL"):
         return JSONResponse(status_code=404, content={"error": "ไม่พบไฟล์"})
 
-    return FileResponse(
-        file_path,
-        media_type="application/pdf",
-        filename=filename
-    )
+    # Redirect ไปยัง signed URL โดยตรง
+    return RedirectResponse(url=signed["signedURL"])
 
 
 # -----------------------
@@ -99,33 +108,13 @@ async def delete_pdf(filename: str):
 
     filename = unquote(filename)
 
-    file_path = os.path.join(UPLOAD_DIR, filename)
-    print("FILE:", filename)
-    print("PATH:", file_path)
-    print("EXIST:", os.path.exists(file_path))
-    # ลบ embeddings
+    # ลบ embeddings ออกจาก documents table
     supabase.table("documents") \
         .delete() \
         .eq("source", filename) \
         .execute()
 
-    # ลบไฟล์จริง
-    if os.path.exists(file_path):
-        os.remove(file_path)
+    # ลบไฟล์จาก Supabase Storage
+    supabase.storage.from_(BUCKET_NAME).remove([filename])
 
-    return {"message": f"ลบเอกสาร {filename} สำเร็จ"}
-
-
-# -----------------------
-# Delete PDF (by source)
-# -----------------------
-@router.delete("/pdf/{source}", dependencies=[Depends(verify_admin)])
-async def delete_pdf(source: str):
-
-    # ลบ embeddings
-    supabase.table("documents") \
-        .delete() \
-        .eq("source", source) \
-        .execute()
-
-    return {"message": f"ลบเอกสาร {source} สำเร็จ"}
+    return {"message": f"ลบเอกสารสำเร็จ"}
