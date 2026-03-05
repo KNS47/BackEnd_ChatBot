@@ -8,31 +8,41 @@ from config import SESSION_SECRET, FRONTEND_URL
 from routes import auth, chat, pdf, analytics
 
 app = FastAPI()
+
+# 1. จัดการเรื่อง Exception และ Limiter ก่อน
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
+
+# 2. CORSMiddleware (ต้องอยู่เหนือ SessionMiddleware เพื่อให้หุ้ม Session ไว้)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[FRONTEND_URL], # มั่นใจว่าใน ENV ไม่มี / ปิดท้าย
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 3. SessionMiddleware (วางไว้ล่างสุดเพื่อให้เป็นชั้นในสุด)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    session_cookie="admin_session",
+    same_site="none",  # จำเป็นมากสำหรับการข้ามโดเมน Vercel -> Railway
+    https_only=True,   # ต้อง True เพราะทั้งสองที่ใช้ HTTPS
+    max_age=3600       # กำหนดอายุ session (เช่น 1 ชม.)
+)
+
 @app.get("/")
 def health():
     return {"status": "ok"}
 
 @app.get("/api/check-admin")
 def check_admin(request: Request):
-    if request.session.get("admin"):
-        return {"authenticated": True}
+    # เช็คตรงๆ จาก session
+    user = request.session.get("admin")
+    if user:
+        return {"authenticated": True, "user": user}
     return {"authenticated": False}
-
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=SESSION_SECRET
-)
-
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[FRONTEND_URL],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 app.include_router(auth.router)
 app.include_router(chat.router)
