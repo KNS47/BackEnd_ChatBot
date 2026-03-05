@@ -1,13 +1,20 @@
-from fastapi import APIRouter, UploadFile, File, Form, Depends
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, Depends
+from fastapi.responses import JSONResponse,FileResponse
+from typing import List
+import os
 import uuid
+from urllib.parse import unquote
 
 from database import supabase
+from pdf_service import process_pdf_background
 from routes.auth import verify_admin
 
 router = APIRouter()
 
-BUCKET = "psfs"
+UPLOAD_DIR = "uploads"
+
+if not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR)
 
 
 # -----------------------
@@ -15,79 +22,110 @@ BUCKET = "psfs"
 # -----------------------
 @router.post("/upload-pdf", dependencies=[Depends(verify_admin)])
 async def upload_pdf(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     category: str = Form(...)
 ):
 
     if not file.filename.endswith(".pdf"):
-        return {"error": "รองรับเฉพาะ PDF"}
+        return {"error": "รองรับเฉพาะไฟล์ PDF เท่านั้น"}
 
     unique_name = f"{uuid.uuid4()}_{file.filename}"
+    file_path = os.path.join(UPLOAD_DIR, unique_name)
 
-    file_bytes = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
 
-    # upload storage
-    supabase.storage.from_(BUCKET).upload(
+    background_tasks.add_task(
+        process_pdf_background,
+        file_path,
         unique_name,
-        file_bytes,
-        {"content-type": "application/pdf"}
+        category
     )
 
-    # save metadata
-    supabase.table("documents").insert({
-        "source": unique_name,
-        "category": category
-    }).execute()
-
-    return {"message": "อัปโหลดสำเร็จ"}
+    return {"message": "อัปโหลดสำเร็จ กำลังประมวลผล..."}
 
 
 # -----------------------
-# List PDFs
+# List PDFs (distinct source)
 # -----------------------
 @router.get("/pdfs", dependencies=[Depends(verify_admin)])
 async def list_pdfs():
 
-    data = supabase.table("documents").select("*").execute()
+    result = supabase.table("documents") \
+        .select("source, category") \
+        .execute()
 
-    return {"files": data.data}
+    if not result.data:
+        return {"files": []}
 
+    seen = {}
+    for row in result.data:
+        seen[row["source"]] = row["category"]
+
+    files = [
+        {"source": k, "category": v}
+        for k, v in seen.items()
+    ]
+
+    return {"files": files}
 
 # -----------------------
 # View PDF
 # -----------------------
-@router.get("/pdfs/{filename}", dependencies=[Depends(verify_admin)])
-async def view_pdf(filename: str):
 
-    url = supabase.storage.from_(BUCKET).get_public_url(filename)
-
-    return RedirectResponse(url)
-
-
-# -----------------------
-# Download PDF
-# -----------------------
 @router.get("/pdfs/download/{filename}", dependencies=[Depends(verify_admin)])
 async def download_pdf(filename: str):
 
-    url = supabase.storage.from_(BUCKET).get_public_url(filename)
+    filename = unquote(filename)
 
-    return RedirectResponse(url)
+    file_path = os.path.join(UPLOAD_DIR, filename)
+
+    if not os.path.exists(file_path):
+        return JSONResponse(status_code=404, content={"error": "ไม่พบไฟล์"})
+
+    return FileResponse(
+        file_path,
+        media_type="application/pdf",
+        filename=filename
+    )
 
 
 # -----------------------
 # Delete PDF
 # -----------------------
+@router.delete("/pdf/{filename}", dependencies=[Depends(verify_admin)])
+async def delete_pdf(filename: str):
+
+    filename = unquote(filename)
+
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    print("FILE:", filename)
+    print("PATH:", file_path)
+    print("EXIST:", os.path.exists(file_path))
+    # ลบ embeddings
+    supabase.table("documents") \
+        .delete() \
+        .eq("source", filename) \
+        .execute()
+
+    # ลบไฟล์จริง
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
+    return {"message": f"ลบเอกสาร {filename} สำเร็จ"}
+
+
+# -----------------------
+# Delete PDF (by source)
+# -----------------------
 @router.delete("/pdf/{source}", dependencies=[Depends(verify_admin)])
 async def delete_pdf(source: str):
 
-    # delete storage
-    supabase.storage.from_(BUCKET).remove([source])
-
-    # delete db
+    # ลบ embeddings
     supabase.table("documents") \
         .delete() \
         .eq("source", source) \
         .execute()
 
-    return {"message": "ลบสำเร็จ"}
+    return {"message": f"ลบเอกสาร {source} สำเร็จ"}

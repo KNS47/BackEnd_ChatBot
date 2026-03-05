@@ -28,11 +28,14 @@ async def analytics_summary():
         datetime.fromisoformat(r["created_at"].replace("Z","+00:00")).date() == today
     ]
 
-    today_users = [
-        r for r in session_data
+    today_users = {
+        r["id"]
+        for r in session_data
         if r.get("created_at") and
-        datetime.fromisoformat(r["created_at"].replace("Z","+00:00")).date() == today
-    ]
+        datetime.fromisoformat(
+            r["created_at"].replace("Z","+00:00")
+        ).date() == today
+    }
 
     categories = set([r["category"] for r in data if r.get("category")])
 
@@ -62,6 +65,7 @@ async def last7days():
     for r in rows:
         if not r.get("created_at"):
             continue
+
         d = datetime.fromisoformat(
             r["created_at"].replace("Z","+00:00")
         ).date()
@@ -82,7 +86,7 @@ async def last7days():
 async def users_per_day():
 
     result = supabase.table("chat_sessions") \
-        .select("created_at") \
+        .select("id, created_at") \
         .execute()
 
     rows = result.data or []

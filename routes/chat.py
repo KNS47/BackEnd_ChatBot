@@ -98,7 +98,13 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
 
         if cache_key in response_cache:
             resp = JSONResponse({"answer": response_cache[cache_key]["answer"]})
-            resp.set_cookie("session_id", session_id, httponly=True, samesite="lax")
+            resp.set_cookie(
+                key="session_id",
+                value=session_id,
+                httponly=True,
+                secure=True,
+                samesite="none"
+            )
             return resp
 
         # Save user message
@@ -194,7 +200,7 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
 - สามารถใช้ "บทสนทนาก่อนหน้า" เพื่อทำความเข้าใจคำถามอ้างอิง
 - ห้ามแต่งข้อมูลที่ไม่มีในข้อมูลเอกสาร
 - ถ้าไม่มีข้อมูลจริง ๆ ให้ตอบว่าไม่พบข้อมูล
-- ตอบเป็น Markdown ได้ (ใช้ **ตัวหนา**, รายการ - ได้)
+- ตอบเป็น Markdown ได้ (ใช้ ตัวหนา, ถ้าเป็นรายการใช้ - ได้)
 
 ข้อมูลเอกสาร:
 {context}
@@ -247,7 +253,13 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
         }).execute()
 
         resp = JSONResponse({"answer": answer})
-        resp.set_cookie("session_id", session_id, httponly=True, samesite="lax")
+        resp.set_cookie(
+            key="session_id",
+            value=session_id,
+            httponly=True,
+            secure=True,
+            samesite="none"
+        )
         return resp
 
     except Exception as e:
