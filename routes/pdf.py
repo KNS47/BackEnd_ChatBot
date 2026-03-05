@@ -1,8 +1,9 @@
 from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse,FileResponse
 from typing import List
 import os
 import uuid
+from urllib.parse import unquote
 
 from database import supabase
 from pdf_service import process_pdf_background
@@ -38,7 +39,7 @@ async def upload_pdf(
     background_tasks.add_task(
         process_pdf_background,
         file_path,
-        file.filename,
+        unique_name,
         category
     )
 
@@ -69,6 +70,42 @@ async def list_pdfs():
 
     return {"files": files}
 
+# -----------------------
+# View PDF
+# -----------------------
+@router.get("/pdfs/{filename}", dependencies=[Depends(verify_admin)])
+async def view_pdf(filename: str):
+
+    filename = unquote(filename)
+    file_path = os.path.join(UPLOAD_DIR, filename)
+
+    if not os.path.exists(file_path):
+        return JSONResponse(status_code=404, content={"error": "ไม่พบไฟล์"})
+
+    return FileResponse(
+        file_path,
+        media_type="application/pdf",
+        filename=filename
+    )
+
+
+# -----------------------
+# Download PDF
+# -----------------------
+@router.get("/pdfs/download/{filename}", dependencies=[Depends(verify_admin)])
+async def download_pdf(filename: str):
+
+    filename = unquote(filename)
+    file_path = os.path.join(UPLOAD_DIR, filename)
+
+    if not os.path.exists(file_path):
+        return JSONResponse(status_code=404, content={"error": "ไม่พบไฟล์"})
+
+    return FileResponse(
+        file_path,
+        media_type="application/pdf",
+        filename=filename
+    )
 
 # -----------------------
 # Delete PDF (by source)
