@@ -50,6 +50,21 @@ async def get_chat_history(session_id: str = Cookie(default=None)):
 
 
 # -----------------------
+# Clear Session
+# -----------------------
+@router.post("/chat/clear-session")
+async def clear_session(session_id: str = Cookie(default=None)):
+    if session_id:
+        supabase.table("chat_messages").delete().eq("session_id", session_id).execute()
+        supabase.table("chat_summaries").delete().eq("session_id", session_id).execute()
+        # ไม่ลบ chat_analytics เพื่อให้แอดมินยังดูสถิติได้
+
+    resp = JSONResponse({"cleared": True})
+    resp.delete_cookie(key="session_id", path="/", samesite="none", secure=True)
+    return resp
+
+
+# -----------------------
 # Chat Endpoint
 # -----------------------
 @router.post("/chat")
@@ -58,7 +73,7 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
 
     now = datetime.utcnow()
 
-    # Session timeout (10 นาที)
+    # Session timeout (30 นาที) — เมื่อหมดอายุลบประวัติแชท แต่คง analytics ไว้
     if session_id:
         last_msg = supabase.table("chat_messages") \
             .select("created_at") \
@@ -69,7 +84,9 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
 
         if last_msg.data:
             last_time = parse_dt(last_msg.data[0]["created_at"])
-            if now - last_time.replace(tzinfo=None) > timedelta(minutes=10):
+            if now - last_time.replace(tzinfo=None) > timedelta(minutes=30):
+                supabase.table("chat_messages").delete().eq("session_id", session_id).execute()
+                supabase.table("chat_summaries").delete().eq("session_id", session_id).execute()
                 session_id = None
 
     # Create new session if needed
@@ -117,12 +134,7 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
             )
             return resp
 
-        # Save user message
-        supabase.table("chat_messages").insert({
-            "session_id": session_id,
-            "role": "user",
-            "content": question
-        }).execute()
+        # จะบันทึก user message เฉพาะเมื่อพบเอกสารที่เกี่ยวข้อง (ด้านล่าง)
 
         # Get history
         history_result = supabase.table("chat_messages") \
@@ -291,7 +303,12 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
                 "category": main_category
             }).execute()
 
-        # Save assistant message
+        # บันทึก user และ assistant message เฉพาะเมื่อพบเอกสาร
+        supabase.table("chat_messages").insert({
+            "session_id": session_id,
+            "role": "user",
+            "content": question
+        }).execute()
         supabase.table("chat_messages").insert({
             "session_id": session_id,
             "role": "assistant",
