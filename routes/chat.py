@@ -70,14 +70,7 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
         if last_msg.data:
             last_time = parse_dt(last_msg.data[0]["created_at"])
             if now - last_time.replace(tzinfo=None) > timedelta(minutes=10):
-                expired_resp = JSONResponse({"expired": True, "answer": "เซสชันหมดอายุแล้วค่ะ กรุณายืนยันการใช้คุกกี้เพื่อเริ่มบทสนทนาใหม่"})
-                expired_resp.delete_cookie(
-                    key="session_id",
-                    httponly=True,
-                    secure=True,
-                    samesite="none"
-                )
-                return expired_resp
+                session_id = None
 
     # Create new session if needed
     if not session_id:
@@ -212,14 +205,12 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
                 f"""ประโยคนี้เป็นคำทักทาย กล่าวลา หรือสนทนาทั่วไป (เช่น สวัสดี ขอบคุณ ทำไรได้บ้าง) ใช่หรือไม่?\nตอบแค่ YES หรือ NO\nประโยค: {question}"""
             ).strip().upper()
 
-        if greeting_check.startswith("YES"):
-            answer = generate_answer(...)
-            # save เฉพาะทักทาย
-            supabase.table("chat_messages").insert({"session_id": session_id, "role": "user", "content": question}).execute()
-            supabase.table("chat_messages").insert({"session_id": session_id, "role": "assistant", "content": answer}).execute()
-        else:
-            # ไม่พบข้อมูล → ไม่ save
-            answer = "ขออภัยค่ะ ไม่พบข้อมูลในเอกสารที่เกี่ยวข้องกับคำถามนี้ หากต้องการสอบถามเพิ่มเติม สามารถติดต่อเจ้าหน้าที่เทศบาลได้โดยตรงค่ะ"
+            if greeting_check.startswith("YES"):
+                answer = generate_answer(
+                    f"""คุณคือแชทบอทเทศบาล เป็นบอทผู้หญิงที่คอยช่วยตอบคำถามให้กับประชาชน\nตอบคำทักทายหรือสนทนาทั่วไปนี้อย่างสุภาพ เป็นมิตร และแนะนำว่าสามารถช่วยตอบคำถามเกี่ยวกับข้อมูลเทศบาลได้\nไม่ต้องสวัสดีซ้ำถ้าทักทายไปแล้ว\nคำถาม: {rewritten_question}"""
+                )
+            else:
+                answer = "ขออภัยค่ะ ไม่พบข้อมูลในเอกสารที่เกี่ยวข้องกับคำถามนี้ หากต้องการสอบถามเพิ่มเติม สามารถติดต่อเจ้าหน้าที่เทศบาลได้โดยตรงค่ะ"
 
             resp = JSONResponse({"answer": answer})
             resp.set_cookie(
