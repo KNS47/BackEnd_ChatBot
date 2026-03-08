@@ -57,10 +57,9 @@ async def get_chat_history(session_id: str = Cookie(default=None)):
 async def chat(request: Request, session_id: str = Cookie(default=None)):
 
     now = datetime.utcnow()
-    no_save = request.headers.get("X-No-Save", "false").lower() == "true"
 
-    # Session timeout (10 นาที) — ข้ามถ้าไม่บันทึก
-    if session_id and not no_save:
+    # Session timeout (10 นาที)
+    if session_id:
         last_msg = supabase.table("chat_messages") \
             .select("created_at") \
             .eq("session_id", session_id) \
@@ -80,8 +79,8 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
                 )
                 return expired_resp
 
-    # Create new session if needed (ข้ามถ้าไม่บันทึก)
-    if not session_id and not no_save:
+    # Create new session if needed
+    if not session_id:
         session = supabase.table("chat_sessions").insert({}).execute()
         session_id = session.data[0]["id"]
 
@@ -95,17 +94,16 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
         if len(question) > 500:
             return {"answer": "ข้อความยาวเกินไป กรุณาส่งไม่เกิน 500 ตัวอักษรค่ะ"}
 
-        # Validate session (ข้ามถ้าไม่บันทึก)
-        if session_id and not no_save:
-            check = supabase.table("chat_sessions").select("id").eq("id", session_id).execute()
-            if not check.data:
-                session = supabase.table("chat_sessions").insert({}).execute()
-                session_id = session.data[0]["id"]
+        # Validate session
+        check = supabase.table("chat_sessions").select("id").eq("id", session_id).execute()
+        if not check.data:
+            session = supabase.table("chat_sessions").insert({}).execute()
+            session_id = session.data[0]["id"]
 
         # -----------------------
-        # Cache (per session) — ข้ามถ้าไม่มี session
+        # Cache (per session)
         # -----------------------
-        cache_key = f"{session_id or 'anon'}:{question.lower()}"
+        cache_key = f"{session_id}:{question.lower()}"
         now_ts = time()
 
         expired = [
@@ -126,15 +124,21 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
             )
             return resp
 
-        # Get history (ข้ามถ้าไม่มี session)
-        history = []
-        if session_id and not no_save:
-            history_result = supabase.table("chat_messages") \
-                .select("role,content") \
-                .eq("session_id", session_id) \
-                .order("created_at", desc=False) \
-                .execute()
-            history = history_result.data or []
+        # Save user message
+        supabase.table("chat_messages").insert({
+            "session_id": session_id,
+            "role": "user",
+            "content": question
+        }).execute()
+
+        # Get history
+        history_result = supabase.table("chat_messages") \
+            .select("role,content") \
+            .eq("session_id", session_id) \
+            .order("created_at", desc=False) \
+            .execute()
+
+        history = history_result.data or []
 
         # -----------------------
         # Summary if long
@@ -151,11 +155,10 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
 
             summary = generate_answer(summary_prompt)
 
-            if not no_save and session_id:
-                supabase.table("chat_summaries").upsert({
-                    "session_id": session_id,
-                    "summary": summary
-                }).execute()
+            supabase.table("chat_summaries").upsert({
+                "session_id": session_id,
+                "summary": summary
+            }).execute()
 
         if len(history) > 10:
             history = history[-10:]
@@ -209,17 +212,14 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
                 f"""ประโยคนี้เป็นคำทักทาย กล่าวลา หรือสนทนาทั่วไป (เช่น สวัสดี ขอบคุณ ทำไรได้บ้าง) ใช่หรือไม่?\nตอบแค่ YES หรือ NO\nประโยค: {question}"""
             ).strip().upper()
 
-            if greeting_check.startswith("YES"):
-                answer = generate_answer(
-                    f"""คุณคือแชทบอทเทศบาล เป็นบอทผู้หญิงที่คอยช่วยตอบคำถามให้กับประชาชน\nตอบคำทักทายหรือสนทนาทั่วไปนี้อย่างสุภาพ เป็นมิตร และแนะนำว่าสามารถช่วยตอบคำถามเกี่ยวกับข้อมูลเทศบาลได้\nไม่ต้องสวัสดีซ้ำถ้าทักทายไปแล้ว\nคำถาม: {rewritten_question}"""
-                )
-                # save เฉพาะกรณีทักทาย และไม่ได้ปฏิเสธคุกกี้
-                if not no_save and session_id:
-                    supabase.table("chat_messages").insert({"session_id": session_id, "role": "user", "content": question}).execute()
-                    supabase.table("chat_messages").insert({"session_id": session_id, "role": "assistant", "content": answer}).execute()
-            else:
-                # ไม่พบข้อมูล → ไม่ save
-                answer = "ขออภัยค่ะ ไม่พบข้อมูลในเอกสารที่เกี่ยวข้องกับคำถามนี้ หากต้องการสอบถามเพิ่มเติม สามารถติดต่อเจ้าหน้าที่เทศบาลได้โดยตรงค่ะ"
+        if greeting_check.startswith("YES"):
+            answer = generate_answer(...)
+            # save เฉพาะทักทาย
+            supabase.table("chat_messages").insert({"session_id": session_id, "role": "user", "content": question}).execute()
+            supabase.table("chat_messages").insert({"session_id": session_id, "role": "assistant", "content": answer}).execute()
+        else:
+            # ไม่พบข้อมูล → ไม่ save
+            answer = "ขออภัยค่ะ ไม่พบข้อมูลในเอกสารที่เกี่ยวข้องกับคำถามนี้ หากต้องการสอบถามเพิ่มเติม สามารถติดต่อเจ้าหน้าที่เทศบาลได้โดยตรงค่ะ"
 
             resp = JSONResponse({"answer": answer})
             resp.set_cookie(
@@ -279,49 +279,42 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
         }
 
         # -----------------------
-        # Analytics + Save — ข้ามถ้าไม่บันทึก
+        # Analytics
         # -----------------------
-        if not no_save and session_id:
-            last_cat_result = supabase.table("chat_analytics") \
-                .select("category") \
-                .eq("session_id", session_id) \
-                .order("created_at", desc=True) \
-                .limit(1) \
-                .execute()
+        last_cat_result = supabase.table("chat_analytics") \
+            .select("category") \
+            .eq("session_id", session_id) \
+            .order("created_at", desc=True) \
+            .limit(1) \
+            .execute()
 
-            last_cat = (
-                last_cat_result.data[0]["category"]
-                if last_cat_result.data else None
-            )
+        last_cat = (
+            last_cat_result.data[0]["category"]
+            if last_cat_result.data else None
+        )
 
-            if not last_cat or last_cat != main_category:
-                supabase.table("chat_analytics").insert({
-                    "session_id": session_id,
-                    "question": question,
-                    "category": main_category
-                }).execute()
-
-            # Save user + assistant เฉพาะเมื่อตอบได้จริง
-            supabase.table("chat_messages").insert({
+        if not last_cat or last_cat != main_category:
+            supabase.table("chat_analytics").insert({
                 "session_id": session_id,
-                "role": "user",
-                "content": question
+                "question": question,
+                "category": main_category
             }).execute()
-            supabase.table("chat_messages").insert({
-                "session_id": session_id,
-                "role": "assistant",
-                "content": answer
-            }).execute()
+
+        # Save assistant message
+        supabase.table("chat_messages").insert({
+            "session_id": session_id,
+            "role": "assistant",
+            "content": answer
+        }).execute()
 
         resp = JSONResponse({"answer": answer})
-        if not no_save and session_id:
-            resp.set_cookie(
-                key="session_id",
-                value=session_id,
-                httponly=True,
-                secure=True,
-                samesite="none"
-            )
+        resp.set_cookie(
+            key="session_id",
+            value=session_id,
+            httponly=True,
+            secure=True,
+            samesite="none"
+        )
         return resp
 
     except Exception as e:
