@@ -70,7 +70,14 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
         if last_msg.data:
             last_time = parse_dt(last_msg.data[0]["created_at"])
             if now - last_time.replace(tzinfo=None) > timedelta(minutes=10):
-                session_id = None
+                expired_resp = JSONResponse({"expired": True, "answer": "เซสชันหมดอายุแล้วค่ะ กรุณายืนยันการใช้คุกกี้เพื่อเริ่มบทสนทนาใหม่"})
+                expired_resp.delete_cookie(
+                    key="session_id",
+                    httponly=True,
+                    secure=True,
+                    samesite="none"
+                )
+                return expired_resp
 
     # Create new session if needed
     if not session_id:
@@ -117,14 +124,7 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
             )
             return resp
 
-        # Save user message
-        supabase.table("chat_messages").insert({
-            "session_id": session_id,
-            "role": "user",
-            "content": question
-        }).execute()
-
-        # Get history
+        # Get history (ยังไม่ save คำถามปัจจุบัน)
         history_result = supabase.table("chat_messages") \
             .select("role,content") \
             .eq("session_id", session_id) \
@@ -209,7 +209,11 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
                 answer = generate_answer(
                     f"""คุณคือแชทบอทเทศบาล เป็นบอทผู้หญิงที่คอยช่วยตอบคำถามให้กับประชาชน\nตอบคำทักทายหรือสนทนาทั่วไปนี้อย่างสุภาพ เป็นมิตร และแนะนำว่าสามารถช่วยตอบคำถามเกี่ยวกับข้อมูลเทศบาลได้\nไม่ต้องสวัสดีซ้ำถ้าทักทายไปแล้ว\nคำถาม: {rewritten_question}"""
                 )
+                # save เฉพาะกรณีทักทาย
+                supabase.table("chat_messages").insert({"session_id": session_id, "role": "user", "content": question}).execute()
+                supabase.table("chat_messages").insert({"session_id": session_id, "role": "assistant", "content": answer}).execute()
             else:
+                # ไม่พบข้อมูล → ไม่ save
                 answer = "ขออภัยค่ะ ไม่พบข้อมูลในเอกสารที่เกี่ยวข้องกับคำถามนี้ หากต้องการสอบถามเพิ่มเติม สามารถติดต่อเจ้าหน้าที่เทศบาลได้โดยตรงค่ะ"
 
             resp = JSONResponse({"answer": answer})
@@ -291,7 +295,12 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
                 "category": main_category
             }).execute()
 
-        # Save assistant message
+        # Save user + assistant เฉพาะเมื่อตอบได้จริง
+        supabase.table("chat_messages").insert({
+            "session_id": session_id,
+            "role": "user",
+            "content": question
+        }).execute()
         supabase.table("chat_messages").insert({
             "session_id": session_id,
             "role": "assistant",
