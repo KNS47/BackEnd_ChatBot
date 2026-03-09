@@ -117,14 +117,7 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
             )
             return resp
 
-        # Save user message
-        supabase.table("chat_messages").insert({
-            "session_id": session_id,
-            "role": "user",
-            "content": question
-        }).execute()
-
-        # Get history
+        # Get history (ยังไม่บันทึก user message ก่อน รอดูว่าต้องค้น RAG ไหม)
         history_result = supabase.table("chat_messages") \
             .select("role,content") \
             .eq("session_id", session_id) \
@@ -212,6 +205,7 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
             else:
                 answer = "ขออภัยค่ะ ไม่พบข้อมูลในเอกสารที่เกี่ยวข้องกับคำถามนี้ หากต้องการสอบถามเพิ่มเติม สามารถติดต่อเจ้าหน้าที่เทศบาลได้โดยตรงค่ะ"
 
+            # ไม่บันทึก history สำหรับ greeting หรือคำถามที่ไม่พบข้อมูล
             resp = JSONResponse({"answer": answer})
             resp.set_cookie(
                 key="session_id",
@@ -268,6 +262,13 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
             "answer": answer,
             "timestamp": time()
         }
+
+        # บันทึก history เฉพาะเมื่อมีการค้น RAG จริง
+        supabase.table("chat_messages").insert({
+            "session_id": session_id,
+            "role": "user",
+            "content": question
+        }).execute()
 
         # -----------------------
         # Analytics
