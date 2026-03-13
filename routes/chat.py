@@ -35,7 +35,23 @@ def parse_dt(ts: str) -> "datetime":
 async def get_chat_history(session_id: str = Cookie(default=None)):
     if not session_id:
         return {"history": []}
-    
+
+    # ตรวจ session timeout (10 นาที) ตอน refresh ด้วย
+    last_msg = supabase.table("chat_messages") \
+        .select("created_at") \
+        .eq("session_id", session_id) \
+        .order("created_at", desc=True) \
+        .limit(1) \
+        .execute()
+
+    if last_msg.data:
+        last_time = parse_dt(last_msg.data[0]["created_at"])
+        now = datetime.utcnow()
+        if now - last_time.replace(tzinfo=None) > timedelta(minutes=10):
+            resp = JSONResponse({"history": [], "session_expired": True})
+            resp.delete_cookie(key="session_id", path="/", samesite="none", secure=True)
+            return resp
+
     check = supabase.table("chat_sessions").select("id").eq("id", session_id).execute()
     if not check.data:
         return {"history": []}
@@ -45,7 +61,7 @@ async def get_chat_history(session_id: str = Cookie(default=None)):
         .eq("session_id", session_id) \
         .order("created_at", desc=False) \
         .execute()
-    
+
     return {"history": result.data}
 
 
