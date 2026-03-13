@@ -58,28 +58,10 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
 
     now = datetime.utcnow()
 
-    # Session timeout (10 นาที)
-    if session_id:
-        last_msg = supabase.table("chat_messages") \
-            .select("created_at") \
-            .eq("session_id", session_id) \
-            .order("created_at", desc=True) \
-            .limit(1) \
-            .execute()
-
-        if last_msg.data:
-            last_time = parse_dt(last_msg.data[0]["created_at"])
-            if now - last_time.replace(tzinfo=None) > timedelta(minutes=10):
-                session_id = None
-
-    # Create new session if needed
-    if not session_id:
-        session = supabase.table("chat_sessions").insert({}).execute()
-        session_id = session.data[0]["id"]
-
     try:
         body = await request.json()
         question = body.get("message", "").strip()
+        no_save = body.get("no_save", False)  # ถ้า True = ไม่บันทึกประวัติ/session
 
         if not question:
             return {"answer": "กรุณาพิมพ์คำถามก่อนส่งค่ะ"}
@@ -87,16 +69,36 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
         if len(question) > 500:
             return {"answer": "ข้อความยาวเกินไป กรุณาส่งไม่เกิน 500 ตัวอักษรค่ะ"}
 
-        # Validate session
-        check = supabase.table("chat_sessions").select("id").eq("id", session_id).execute()
-        if not check.data:
-            session = supabase.table("chat_sessions").insert({}).execute()
-            session_id = session.data[0]["id"]
+        # จัดการ session เฉพาะเมื่อ consent แล้ว
+        if not no_save:
+            # Session timeout (10 นาที)
+            if session_id:
+                last_msg = supabase.table("chat_messages") \
+                    .select("created_at") \
+                    .eq("session_id", session_id) \
+                    .order("created_at", desc=True) \
+                    .limit(1) \
+                    .execute()
+
+                if last_msg.data:
+                    last_time = parse_dt(last_msg.data[0]["created_at"])
+                    if now - last_time.replace(tzinfo=None) > timedelta(minutes=10):
+                        session_id = None
+
+            # Create new session if needed
+            if not session_id:
+                session = supabase.table("chat_sessions").insert({}).execute()
+                session_id = session.data[0]["id"]
+            else:
+                check = supabase.table("chat_sessions").select("id").eq("id", session_id).execute()
+                if not check.data:
+                    session = supabase.table("chat_sessions").insert({}).execute()
+                    session_id = session.data[0]["id"]
 
         # -----------------------
-        # Cache (per session)
+        # Cache (per session หรือ per question ถ้าไม่มี session)
         # -----------------------
-        cache_key = f"{session_id}:{question.lower()}"
+        cache_key = f"{session_id or 'anon'}:{question.lower()}"
         now_ts = time()
 
         expired = [
@@ -117,14 +119,15 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
             )
             return resp
 
-        # Get history (ยังไม่บันทึก user message ก่อน รอดูว่าต้องค้น RAG ไหม)
-        history_result = supabase.table("chat_messages") \
-            .select("role,content") \
-            .eq("session_id", session_id) \
-            .order("created_at", desc=False) \
-            .execute()
-
-        history = history_result.data or []
+        # Get history (เฉพาะเมื่อ consent แล้ว)
+        history = []
+        if not no_save and session_id:
+            history_result = supabase.table("chat_messages") \
+                .select("role,content") \
+                .eq("session_id", session_id) \
+                .order("created_at", desc=False) \
+                .execute()
+            history = history_result.data or []
 
         # -----------------------
         # Summary if long
@@ -207,13 +210,14 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
 
             # ไม่บันทึก history สำหรับ greeting หรือคำถามที่ไม่พบข้อมูล
             resp = JSONResponse({"answer": answer})
-            resp.set_cookie(
-                key="session_id",
-                value=session_id,
-                httponly=True,
-                secure=True,
-                samesite="none"
-            )
+            if not no_save and session_id:
+                resp.set_cookie(
+                    key="session_id",
+                    value=session_id,
+                    httponly=True,
+                    secure=True,
+                    samesite="none"
+                )
             return resp
         categories = list(set([
             m["category"] for m in matches if m.get("category")
@@ -264,50 +268,52 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
             "timestamp": time()
         }
 
-        # บันทึก history เฉพาะเมื่อมีการค้น RAG จริง
-        supabase.table("chat_messages").insert({
-            "session_id": session_id,
-            "role": "user",
-            "content": question
-        }).execute()
-
-        # -----------------------
-        # Analytics
-        # -----------------------
-        last_cat_result = supabase.table("chat_analytics") \
-            .select("category") \
-            .eq("session_id", session_id) \
-            .order("created_at", desc=True) \
-            .limit(1) \
-            .execute()
-
-        last_cat = (
-            last_cat_result.data[0]["category"]
-            if last_cat_result.data else None
-        )
-
-        if not last_cat or last_cat != main_category:
-            supabase.table("chat_analytics").insert({
+        # บันทึก history เฉพาะเมื่อ consent และมี RAG จริง
+        if not no_save and session_id:
+            supabase.table("chat_messages").insert({
                 "session_id": session_id,
-                "question": question,
-                "category": main_category
+                "role": "user",
+                "content": question
             }).execute()
 
-        # Save assistant message
-        supabase.table("chat_messages").insert({
-            "session_id": session_id,
-            "role": "assistant",
-            "content": answer
-        }).execute()
+            # -----------------------
+            # Analytics
+            # -----------------------
+            last_cat_result = supabase.table("chat_analytics") \
+                .select("category") \
+                .eq("session_id", session_id) \
+                .order("created_at", desc=True) \
+                .limit(1) \
+                .execute()
+
+            last_cat = (
+                last_cat_result.data[0]["category"]
+                if last_cat_result.data else None
+            )
+
+            if not last_cat or last_cat != main_category:
+                supabase.table("chat_analytics").insert({
+                    "session_id": session_id,
+                    "question": question,
+                    "category": main_category
+                }).execute()
+
+            # Save assistant message
+            supabase.table("chat_messages").insert({
+                "session_id": session_id,
+                "role": "assistant",
+                "content": answer
+            }).execute()
 
         resp = JSONResponse({"answer": answer})
-        resp.set_cookie(
-            key="session_id",
-            value=session_id,
-            httponly=True,
-            secure=True,
-            samesite="none"
-        )
+        if not no_save and session_id:
+            resp.set_cookie(
+                key="session_id",
+                value=session_id,
+                httponly=True,
+                secure=True,
+                samesite="none"
+            )
         return resp
 
     except Exception as e:
