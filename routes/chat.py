@@ -41,7 +41,7 @@ async def get_chat_history(session_id: str = Cookie(default=None)):
         return {"history": []}
 
     result = supabase.table("chat_messages") \
-        .select("role, content") \
+        .select("role, content, created_at") \
         .eq("session_id", session_id) \
         .order("created_at", desc=False) \
         .execute()
