@@ -207,7 +207,7 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
 
         result = supabase.rpc("match_documents", {
             "query_embedding": question_embedding,
-            "match_threshold": 0.75,
+            "match_threshold": 0.6,
             "match_count": 8
         }).execute()
 
