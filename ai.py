@@ -54,9 +54,11 @@ async def generate_answer(prompt: str) -> str:
     global current_index
     last_error = None
 
+    # สลับคีย์ก่อนเป็นอันดับแรก
     for k in range(len(API_KEYS)):
         key_index = (current_index + k) % len(API_KEYS)
-
+        
+        # ลองใช้โมเดลที่ต้องการ (เช่น lite)
         for model_name in GENERATION_MODELS:
             try:
                 def _sync_generate(ki=key_index, mn=model_name):
@@ -66,11 +68,12 @@ async def generate_answer(prompt: str) -> str:
                     return response.text
 
                 text = await asyncio.get_event_loop().run_in_executor(None, _sync_generate)
-                current_index = key_index
+                current_index = key_index # บันทึกคีย์ที่ใช้งานได้ล่าสุด
                 return text
-
             except Exception as e:
                 last_error = e
-                logger.warning(f"generate_answer key[{key_index}] model[{model_name}] error: {e}")
-
+                logger.warning(f"Key[{key_index}] Model[{model_name}] failed: {e}")
+                # ถ้าเป็น Error 429 (Quota) ให้หยุดลองโมเดลอื่นในคีย์นี้ แล้วไปคีย์ถัดไปทันที
+                if "429" in str(e):
+                    break 
     raise last_error
