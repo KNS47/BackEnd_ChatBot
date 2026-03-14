@@ -207,7 +207,7 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
 
         result = supabase.rpc("match_documents", {
             "query_embedding": question_embedding,
-            "match_threshold": 0.6,
+            "match_threshold": 0.5,
             "match_count": 8
         }).execute()
 
@@ -220,14 +220,10 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
 
             if greeting_check.startswith("YES"):
                 answer = generate_answer(
-                    f"""คุณคือแชทบอทเทศบาล เป็นบอทผู้หญิงที่คอยช่วยตอบคำถามให้กับประชาชน
-ตอบคำทักทายหรือสนทนาทั่วไปนี้อย่างสุภาพ เป็นมิตร และแนะนำว่าสามารถช่วยตอบคำถามเกี่ยวกับข้อมูลเทศบาลได้
-ไม่ต้องสวัสดีซ้ำถ้าทักทายไปแล้ว
-ห้ามใส่ URL หรือลิงก์ใดๆ ทั้งสิ้น
-คำถาม: {rewritten_question}"""
+                    f"""คุณคือแชทบอทเทศบาล เป็นบอทผู้หญิงที่คอยช่วยตอบคำถามให้กับประชาชน\nตอบคำทักทายหรือสนทนาทั่วไปนี้อย่างสุภาพ เป็นมิตร และแนะนำว่าสามารถช่วยตอบคำถามเกี่ยวกับข้อมูลเทศบาลได้\nไม่ต้องสวัสดีซ้ำถ้าทักทายไปแล้ว\nคำถาม: {rewritten_question}"""
                 )
             else:
-                answer = "ขออภัยค่ะ ไม่พบข้อมูลในเอกสารที่เกี่ยวข้องกับคำถามนี้ค่ะ หากต้องการสอบถามเพิ่มเติม สามารถติดต่อเจ้าหน้าที่เทศบาลโดยตรงได้ที่ โทร 043-246505 หรือ 043-246506 ค่ะ"
+                answer = "ขออภัยค่ะ ไม่พบข้อมูลในเอกสารที่เกี่ยวข้องกับคำถามนี้ หากต้องการสอบถามเพิ่มเติม สามารถติดต่อเจ้าหน้าที่เทศบาลได้โดยตรงค่ะ"
 
             # ไม่บันทึก history สำหรับ greeting หรือคำถามที่ไม่พบข้อมูล
             resp = JSONResponse({"answer": answer})
@@ -257,13 +253,13 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
             if history_text else ""
         )
 
-        prompt = f"""คุณคือแชทบอทเทศบาล เป็นบอทผู้หญิงที่คอยช่วยตอบคำถามให้กับประชาชนที่เข้ามาสอบถาม
+        prompt = f"""คุณคือแชทบอทเทศบาล เป็นบอทผู้หญิงที่คอยช่วยตอบคำถามให้กับประชาชนที่เข้ามาสอบถาม คุณไม่มีชื่อจริง แต่ถ้าถามให้แนะนำตัว ให้บอกว่าเป็น "แชทบอทเทศบาล" และสามารถช่วยตอบคำถามเกี่ยวกับข้อมูลเทศบาลได้
 กติกาสำคัญ:
 - ให้ใช้ข้อมูลจาก "ข้อมูลเอกสาร" เป็นหลักในการตอบ
 - สามารถใช้ "บทสนทนาก่อนหน้า" เพื่อทำความเข้าใจคำถามอ้างอิง
 - ห้ามแต่งข้อมูลที่ไม่มีในข้อมูลเอกสาร
 - ถ้าไม่มีข้อมูลจริง ๆ ให้ตอบว่า ไม่พบข้อมูล
-- ถ้ามี URL หรือลิงก์ในข้อมูลเอกสาร ให้ copy URL นั้นมาตรงๆ เท่านั้น ห้ามเปลี่ยนแม้แต่ตัวอักษรเดียว ห้ามแต่ง URL ขึ้นมาเองโดยเด็ดขาด ถ้าไม่มี URL ในข้อมูลเอกสาร ห้ามใส่ URL ใดๆ ทั้งสิ้น
+- ถ้ามี URL หรือลิงก์ในข้อมูลเอกสาร ให้ใช้ URL นั้นตรงๆ ห้ามเปลี่ยน ห้ามแต่ง URL ขึ้นมาเองเด็ดขาดใฟ้เอาข้อมูลจากเอกสารมาใช้ตอบคำถามเท่านั้น
 - ตอบเป็น Markdown ได้ (ใช้ ตัวหนา, ถ้าเป็นรายการใช้ - ได้)
 
 ข้อมูลเอกสาร:
@@ -281,15 +277,6 @@ async def chat(request: Request, session_id: str = Cookie(default=None)):
 คำถาม: {rewritten_question}"""
 
         answer = generate_answer(prompt)
-
-        # Post-process: ลบ URL ที่ไม่อยู่ใน whitelist จาก context
-        import re
-        urls_in_answer = re.findall(r"https?://\S+", answer)
-        for url in urls_in_answer:
-            url_clean = url.rstrip('.,)"\'')
-            if url_clean not in urls_in_context:
-                answer = answer.replace(url, url_clean if url_clean in urls_in_context else "")
-        answer = re.sub(r'\s{2,}', ' ', answer).strip()
 
         # Cache answer
         response_cache[cache_key] = {
