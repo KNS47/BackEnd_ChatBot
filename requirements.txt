@@ -12,3 +12,5 @@ slowapi
 httpx
 pymupdf
 pdfplumber
+cachetools==5.3.3
+httpx==0.27.0
