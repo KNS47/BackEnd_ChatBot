@@ -5,7 +5,7 @@ from shutil import copyfile
 
 PUBLIC_ASSETS = (
     "admin.css", "admin.html", "chat.css", "chat.js", "config.js", "icons.svg", "index.html",
-    "login.css", "login.html", "login.js", "stats.html",
+    "login.css", "login.html", "login.js", "staff.js", "stats.html",
 )
 
 

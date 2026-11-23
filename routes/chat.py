@@ -15,6 +15,8 @@ from config import COOKIE_SAMESITE, COOKIE_SECURE
 from database import supabase
 from middleware import limiter
 from municipal_info import COMPLAINT_URL, lookup as lookup_official
+from routes.usage import record_usage
+from usage_counter import generation_usage
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -305,6 +307,8 @@ async def chat(request: Request, background_tasks: BackgroundTasks, session_id: 
     if not isinstance(no_save, bool):
         return JSONResponse({"error": "รูปแบบการบันทึกประวัติไม่ถูกต้องค่ะ"}, status_code=400)
 
+    model_tokens = [0]
+    usage_context = generation_usage.set(model_tokens)
     try:
         history = []
         recent = body.get("recent")
@@ -324,8 +328,13 @@ async def chat(request: Request, background_tasks: BackgroundTasks, session_id: 
         answer, category = await _answer(question, history)
     except Exception as exc:
         logger.warning("Chat request failed: %s", type(exc).__name__)
+        if model_tokens[0]:
+            background_tasks.add_task(record_usage, 0, model_tokens[0])
         return JSONResponse({"error": UNAVAILABLE}, status_code=503)
+    finally:
+        generation_usage.reset(usage_context)
 
+    background_tasks.add_task(record_usage, 1, model_tokens[0])
     payload = {"answer": answer}
     if not no_save:
         try:

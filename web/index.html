@@ -2,116 +2,420 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="description" content="สอบถามบริการ ข่าวสาร และช่องทางติดต่อเทศบาลเมืองศิลา">
-    <title>ผู้ช่วยเทศบาลเมืองศิลา</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>แชทบอท เทศบาลเมืองศิลา</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="chat.css">
-    <script src="config.js" defer></script>
-    <script src="chat.js" defer></script>
 </head>
 <body>
+
 <div class="app">
-    <aside class="sidebar" aria-label="ช่องทางเทศบาล">
-        <a class="brand" href="/" aria-label="หน้าหลักผู้ช่วยเทศบาลเมืองศิลา">
-            <span class="brand-mark" aria-hidden="true"><span></span></span>
-            <div><strong>เทศบาลเมืองศิลา</strong><small>อำเภอเมืองขอนแก่น</small></div>
-        </a>
-        <nav aria-label="บริการออนไลน์">
-            <p class="sidebar-label">ช่องทางบริการ</p>
-            <a class="sidebar-current" href="/" aria-current="page"><span class="control-label"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#chat"></use></svg>ผู้ช่วยเทศบาล</span></a>
-            <a href="https://www.sila-kk.go.th/index.php" target="_blank" rel="noopener noreferrer"><span class="control-label"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#globe"></use></svg>เว็บไซต์เทศบาล</span><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#external"></use></svg></a>
-            <a href="https://www.sila-kk.go.th/link.php?menuid=11" target="_blank" rel="noopener noreferrer"><span class="control-label"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#chat"></use></svg>ร้องเรียน / ร้องทุกข์</span><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#external"></use></svg></a>
-        </nav>
+
+    <!-- ── Sidebar ── -->
+    <aside class="sidebar hidden" id="sidebar" aria-label="ข้อมูลเทศบาล" inert>
+        <div class="sidebar-emblem">
+            <div class="emblem-seal"><svg class="icon" aria-hidden="true"><use href="/icons.svg#chat"></use></svg></div>
+            <button class="close-sidebar" type="button" onclick="toggleSidebar()" aria-label="ปิดแถบด้านข้าง"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            <div class="emblem-name">เทศบาลเมืองศิลา</div>
+            <div class="emblem-sub">อำเภอเมือง จังหวัดขอนแก่น</div>
+        </div>
+        <div class="sidebar-body">
+            <nav class="sidebar-nav" aria-label="บริการประชาชน">
+                <a href="/" aria-current="page"><svg class="icon" aria-hidden="true"><use href="/icons.svg#chat"></use></svg> ผู้ช่วยเทศบาล</a>
+                <a href="https://www.sila-kk.go.th/pagelist.php?menuid=47" target="_blank" rel="noopener noreferrer"><svg class="icon" aria-hidden="true"><use href="/icons.svg#document"></use></svg> แบบฟอร์มเทศบาล<svg class="icon external-mark" aria-hidden="true"><use href="/icons.svg#external"></use></svg></a>
+                <a href="https://www.sila-kk.go.th/link.php?menuid=11" target="_blank" rel="noopener noreferrer"><svg class="icon" aria-hidden="true"><use href="/icons.svg#chat"></use></svg> ร้องเรียนและร้องทุกข์<svg class="icon external-mark" aria-hidden="true"><use href="/icons.svg#external"></use></svg></a>
+                <a href="https://www.sila-kk.go.th/" target="_blank" rel="noopener noreferrer"><svg class="icon" aria-hidden="true"><use href="/icons.svg#globe"></use></svg> เว็บไซต์เทศบาล<svg class="icon external-mark" aria-hidden="true"><use href="/icons.svg#external"></use></svg></a>
+            </nav>
+            <section class="sidebar-contact" aria-labelledby="contact-heading">
+                <h2 id="contact-heading"><svg class="icon" aria-hidden="true"><use href="/icons.svg#phone"></use></svg> ติดต่อเจ้าหน้าที่</h2>
+                <a href="tel:043246505">043-246505</a>
+                <a href="tel:043246506">043-246506</a>
+            </section>
+        </div>
         <div class="sidebar-footer">
-            <div class="help">
-                <strong>คุยกับเจ้าหน้าที่</strong>
-                <a href="tel:043246505"><span class="control-label"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#phone"></use></svg>043-246505</span></a>
-            </div>
-            <a href="login.html"><span class="control-label"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#login"></use></svg>สำหรับเจ้าหน้าที่</span></a>
+            <button class="admin-btn" type="button" onclick="window.location.href='login.html'"><svg class="icon" aria-hidden="true"><use href="/icons.svg#login"></use></svg> สำหรับเจ้าหน้าที่</button>
         </div>
     </aside>
 
-    <main class="workspace">
-        <header class="topbar">
-            <span>ผู้ช่วยเทศบาลเมืองศิลา</span>
-            <details class="mobile-links">
-                <summary><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#phone"></use></svg> ช่องทางติดต่อ</summary>
-                <div class="mobile-menu">
-                    <a href="tel:043246505">โทร 043-246505</a>
-                    <a href="https://www.sila-kk.go.th/index.php" target="_blank" rel="noopener noreferrer">เว็บไซต์เทศบาล ↗</a>
-                    <a href="https://www.sila-kk.go.th/link.php?menuid=11" target="_blank" rel="noopener noreferrer">ร้องเรียน / ร้องทุกข์ ↗</a>
-                    <a href="login.html">สำหรับเจ้าหน้าที่</a>
-                </div>
-            </details>
-            <button id="open-privacy" class="quiet-button" type="button"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#settings"></use></svg> ตั้งค่าประวัติ</button>
-        </header>
+    <!-- Backdrop (mobile) -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
 
-        <section id="view" class="view" aria-label="หน้าต่างสนทนา">
-            <div class="conversation">
-                <div id="welcome">
-                    <section class="hero">
-                        <div>
-                            <h1>ถามเรื่องเทศบาล<br>ได้ที่นี่</h1>
-                            <p>ค้นข้อมูลบริการ เอกสาร และช่องทางติดต่อเทศบาลเมืองศิลา</p>
-                        </div>
-                        <div class="hero-art" aria-hidden="true"><span></span><i></i><b></b></div>
-                    </section>
-                    <section class="suggestions" aria-labelledby="suggestions-title">
-                        <h2 id="suggestions-title">ลองถามผู้ช่วย</h2>
-                        <div class="suggestion-grid">
-                            <button type="button" data-question="ขอเอกสารหรือแบบฟอร์มของเทศบาลได้ที่ไหน">
-                                <span class="topic-icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#document"></use></svg></span><div><strong>เอกสารและแบบฟอร์ม</strong><span>ขอเอกสารได้ที่ไหน</span></div>
-                            </button>
-                            <button type="button" data-question="เทศบาลเมืองศิลามีสวัสดิการอะไรบ้าง">
-                                <span class="topic-icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#users"></use></svg></span><div><strong>สวัสดิการประชาชน</strong><span>มีบริการอะไรบ้าง</span></div>
-                            </button>
-                            <button type="button" data-question="ติดตามข่าวประชาสัมพันธ์ของเทศบาลเมืองศิลาได้ที่ไหน">
-                                <span class="topic-icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#news"></use></svg></span><div><strong>ข่าวและประกาศ</strong><span>ติดตามข่าวจากที่ไหน</span></div>
-                            </button>
-                            <button type="button" data-question="ติดต่อเทศบาลเมืองศิลาได้ทางไหนบ้าง">
-                                <span class="topic-icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#phone"></use></svg></span><div><strong>ติดต่อเทศบาล</strong><span>เบอร์โทรและช่องทางติดต่อ</span></div>
-                            </button>
-                        </div>
-                    </section>
-                </div>
-                <div id="chat" role="log" aria-label="ข้อความสนทนา"></div>
-                <p id="waiting" role="status" hidden>กำลังค้นข้อมูลเทศบาล…</p>
-                <p id="history-notice" role="status" hidden></p>
-            </div>
-        </section>
+    <!-- ── Chat ── -->
+    <main class="chat-container">
 
-        <footer class="composer">
-            <div class="composer-inner">
-                <div id="request-error" class="error" hidden>
-                    <p role="alert" id="error-text"></p>
-                    <button class="quiet-button" type="button" id="retry"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#refresh"></use></svg> ลองอีกครั้ง</button>
-                </div>
-                <form id="message-form">
-                    <label class="sr-only" for="message">คำถามถึงเทศบาลเมืองศิลา</label>
-                    <input id="message" name="message" required maxlength="500" autocomplete="off" placeholder="พิมพ์คำถามของคุณ…">
-                    <button id="send" type="submit">ส่งคำถาม <svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#send"></use></svg></button>
-                </form>
-                <p class="composer-note">หลีกเลี่ยงการส่งเลขบัตรประชาชนหรือข้อมูลส่วนตัว</p>
+        <div class="chat-header">
+            <button class="toggle-sidebar" type="button" onclick="toggleSidebar()" aria-label="เปิดหรือปิดแถบด้านข้าง" aria-controls="sidebar" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="/icons.svg#menu"></use></svg></button>
+            <div class="header-avatar"><svg class="icon" aria-hidden="true"><use href="/icons.svg#chat"></use></svg></div>
+            <div class="header-info">
+                <div class="header-name">ผู้ช่วยเทศบาลเมืองศิลา</div>
+                <div class="header-status">ข้อมูล บริการ และช่องทางติดต่อ</div>
             </div>
-        </footer>
+            <button class="history-settings" id="history-settings" type="button" onclick="toggleHistorySettings()" aria-controls="cookieBanner" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="/icons.svg#settings"></use></svg><span>ประวัติ</span></button>
+        </div>
+
+        <div class="chat-body" id="chat" role="log" aria-label="ข้อความสนทนา" aria-relevant="additions text">
+            <section class="welcome-chip">
+                <h1>สอบถามเทศบาลเมืองศิลา</h1>
+                <p>พิมพ์คำถามเกี่ยวกับบริการ หรือเริ่มจากเมนูด่วนด้านล่าง</p>
+            </section>
+            <p class="history-feedback" id="history-feedback" role="status"></p>
+        </div>
+
+        <div id="cookieBanner" class="cookie-banner" style="display:none;">
+            <div class="cookie-inner">
+                <div>
+                    <p>เก็บประวัติการสนทนาไว้เปิดดูภายหลังไหม?</p>
+                    <p class="history-choice" id="current-history-choice"></p>
+                </div>
+                <div class="cookie-actions">
+                    <button class="btn-decline" type="button" onclick="closeHistorySettings()">ปิด</button>
+                    <button class="btn-decline" type="button" onclick="declineCookies()">ไม่เก็บ</button>
+                    <button class="btn-accept" type="button" onclick="acceptCookies()">เก็บประวัติ</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="toggle-quick">
+            <button type="button" onclick="toggleQuick()" id="toggleQuickBtn" aria-controls="quickActions" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="/icons.svg#menu"></use></svg><span>เมนูด่วน</span><svg class="icon quick-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        </div>
+
+        <div class="quick-actions" id="quickActions" style="display:none;">
+            <button type="button" onclick="quickSend('แจ้งเรื่องร้องเรียน')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#document"></use></svg> แจ้งเรื่องร้องเรียน</button>
+            <button type="button" onclick="quickSend('ขอคำปรึกษา')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#chat"></use></svg> ขอคำปรึกษา</button>
+            <button type="button" onclick="quickSend('ข้อมูลเทศบาล')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#globe"></use></svg> ข้อมูลเทศบาล</button>
+            <button type="button" onclick="quickSend('ติดต่อเทศบาลเมืองศิลาได้ทางไหนบ้าง')"><svg class="icon" aria-hidden="true"><use href="/icons.svg#phone"></use></svg> ติดต่อเทศบาล</button>
+        </div>
+
+        <div class="request-feedback" id="request-feedback" data-state="idle">
+            <p id="request-status" role="status" aria-atomic="true"></p>
+            <button class="stop-btn" id="stop-waiting" type="button" onclick="stopWaiting()" hidden>หยุดรอ</button>
+            <button class="retry-btn" id="retry-send" type="button" onclick="retrySend()" hidden><svg class="icon" aria-hidden="true"><use href="/icons.svg#refresh"></use></svg> ลองส่งอีกครั้ง</button>
+        </div>
+        <div class="chat-footer">
+            <div class="input-wrap">
+                <input id="msg" aria-label="ข้อความถึงเทศบาล" maxlength="500" placeholder="พิมพ์ข้อความของคุณ…" oninput="updateSendControls()" onkeydown="if(event.key==='Enter' && !event.isComposing) send()">
+            </div>
+            <button class="btn-send" type="button" onclick="send()" disabled><span>ส่ง</span><svg class="icon" aria-hidden="true"><use href="/icons.svg#send"></use></svg></button>
+        </div>
+
     </main>
 </div>
 
-<template id="copy-answer-template">
-    <button class="copy-answer" type="button"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#copy"></use></svg> <span>คัดลอกคำตอบ</span></button>
-</template>
-<dialog id="privacy" aria-labelledby="privacy-title">
-    <form method="dialog">
-        <h2 id="privacy-title">ประวัติการสนทนา</h2>
-        <p>ระบบส่งคำถามและบริบทล่าสุดไปยัง Gemini เพื่อสร้างคำตอบ หากเลือกบันทึก ระบบจะเก็บประวัติเพื่อให้เปิดดูภายหลัง</p>
-        <div class="privacy-actions">
-            <button value="declined" autofocus>ไม่บันทึก</button>
-            <button value="accepted">บันทึกประวัติ</button>
-        </div>
-    </form>
-</dialog>
+<script src="/config.js"></script>
+<script>
+function webUrl(value) {
+    try {
+        const url = new URL(value);
+        if ((url.protocol === "https:" || url.protocol === "http:") && !url.username && !url.password) {
+            return url.href;
+        }
+    } catch {
+        return null;
+    }
+    return null;
+}
+
+function makeLink(label, url) {
+    const link = document.createElement("a");
+    link.href = url;
+    link.textContent = label;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    return link;
+}
+
+function appendAnswer(container, value) {
+    // Chat answers use a small subset of Markdown. Build with text nodes and
+    // validated links so model or document output cannot create live HTML.
+    const markup = /\[([^\]\n]+)\]\(([^\s)]+)\)|\*\*([^*\n]+)\*\*|https?:\/\/[^\s<>\[\])]+/g;
+    let offset = 0;
+    for (const match of value.matchAll(markup)) {
+        container.append(value.slice(offset, match.index));
+        const [token, label, href, bold] = match;
+        if (bold) {
+            const strong = document.createElement("strong");
+            strong.textContent = bold;
+            container.append(strong);
+        } else {
+            const linkValue = href ?? token.replace(/[.,;!?]+$/, "");
+            const url = webUrl(linkValue);
+            if (url) {
+                container.append(makeLink(label ?? linkValue, url));
+                if (!href) container.append(token.slice(linkValue.length));
+            } else {
+                container.append(token);
+            }
+        }
+        offset = match.index + token.length;
+    }
+    container.append(value.slice(offset));
+}
+</script>
+<script>
+    const chat = document.getElementById("chat");
+    let lastSender = null;
+
+    function getNow() {
+        return new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatTime(isoString) {
+        if (!isoString) return getNow();
+        try {
+            const s = isoString.endsWith("Z") || isoString.includes("+") ? isoString : isoString + "+00:00";
+            return new Date(s).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' });
+        } catch { return getNow(); }
+    }
+
+    function addMessage(text, sender, timestamp) {
+        const row = document.createElement("div");
+        row.className = `msg-row ${sender}${sender === lastSender ? ' no-avatar' : ''}`;
+
+        const avatar = document.createElement("div");
+        avatar.className = "msg-avatar";
+        avatar.append(document.querySelector(".header-avatar svg").cloneNode(true));
+
+        const col = document.createElement("div");
+        col.style.cssText = "display:flex;flex-direction:column;max-width:72%";
+        if (sender === "user") col.style.alignItems = "flex-end";
+
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        if (sender === "bot") {
+            appendAnswer(bubble, text || "");
+        } else {
+            bubble.textContent = text;
+        }
+
+        const time = document.createElement("span");
+        time.className = "msg-time";
+        time.textContent = formatTime(timestamp);
+
+        col.appendChild(bubble);
+        col.appendChild(time);
+        if (sender === "bot") {
+            row.appendChild(avatar);
+            row.appendChild(col);
+        } else {
+            row.appendChild(col);
+        }
+
+        chat.appendChild(row);
+        chat.scrollTop = chat.scrollHeight;
+        lastSender = sender;
+    }
+
+    let sending = false;
+    let failedQuestion = null;
+    let activeChatRequest = null;
+    let historyChoice = null;
+    try {
+        historyChoice = localStorage.getItem("chat_cookie_consent");
+    } catch {
+        // The setting is still available for this page if storage is blocked.
+    }
+
+    function updateSendControls() {
+        document.querySelector(".btn-send").disabled = sending || !document.getElementById("msg").value.trim();
+        document.querySelectorAll("#quickActions button").forEach(button => { button.disabled = sending; });
+    }
+
+    function showRequestStatus(state, message = "") {
+        document.getElementById("request-feedback").dataset.state = state;
+        document.getElementById("request-status").textContent = message;
+        document.getElementById("retry-send").hidden = state !== "error" && state !== "stopped";
+        document.getElementById("stop-waiting").hidden = state !== "pending";
+    }
+
+    async function handleChatRequest(text) {
+        const request = new AbortController();
+        activeChatRequest = request;
+        const timeout = setTimeout(() => request.abort("timeout"), 45_000);
+        sending = true;
+        failedQuestion = null;
+        updateSendControls();
+        showRequestStatus("pending", "กำลังค้นข้อมูลเทศบาล…");
+        const noSave = historyChoice !== "accepted";
+        try {
+            const res = await fetch(`${window.API_BASE}/chat`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                signal: request.signal,
+                body: JSON.stringify({ message: text, no_save: noSave })
+            });
+            const data = await res.json();
+            if (request.signal.aborted) throw new Error("Stopped");
+            if (!res.ok || typeof data.answer !== "string") {
+                throw new Error(typeof data.error === "string" ? data.error : "ส่งคำถามไม่สำเร็จ");
+            }
+            addMessage(data.answer, "bot");
+            showRequestStatus(
+                data.history_saved === false ? "notice" : "idle",
+                data.history_saved === false ? "ได้รับคำตอบแล้ว แต่ยังบันทึกประวัติไม่ได้" : ""
+            );
+        } catch {
+            failedQuestion = text;
+            if (request.signal.reason === "stopped") {
+                showRequestStatus("stopped", "หยุดรอแล้ว ระบบอาจยังประมวลผลคำถามเดิมอยู่");
+            } else {
+                showRequestStatus("error", request.signal.reason === "timeout"
+                    ? "ระบบใช้เวลาตอบนานเกินไป"
+                    : "ส่งคำถามไม่สำเร็จ");
+            }
+        } finally {
+            clearTimeout(timeout);
+            activeChatRequest = null;
+            sending = false;
+            updateSendControls();
+        }
+    }
+
+    function stopWaiting() {
+        if (!activeChatRequest) return;
+        activeChatRequest.abort("stopped");
+        document.getElementById("msg").focus();
+    }
+
+    function retrySend() {
+        if (!sending && failedQuestion) handleChatRequest(failedQuestion);
+    }
+
+    function send() {
+        const input = document.getElementById("msg");
+        const text = input.value.trim();
+        if (!text || sending) return;
+        addMessage(text, "user");
+        input.value = "";
+        handleChatRequest(text);
+    }
+
+    function quickSend(text) {
+        if (sending) return;
+        addMessage(text, "user");
+        handleChatRequest(text);
+    }
+
+    function toggleQuick() {
+        const qa = document.getElementById("quickActions");
+        const btn = document.getElementById("toggleQuickBtn");
+        const isOpen = qa.style.display === "grid";
+        qa.style.display = isOpen ? "none" : "grid";
+        btn.setAttribute("aria-expanded", String(!isOpen));
+    }
+
+    function checkCookieConsent() {
+        setHistorySettings(!historyChoice);
+    }
+    function setHistorySettings(open) {
+        document.getElementById("current-history-choice").textContent = historyChoice === "accepted"
+            ? "ค่าปัจจุบัน: เก็บประวัติ"
+            : "ค่าปัจจุบัน: ไม่เก็บประวัติ";
+        document.getElementById("cookieBanner").style.display = open ? "block" : "none";
+        document.getElementById("history-settings").setAttribute("aria-expanded", String(open));
+    }
+    function toggleHistorySettings() {
+        setHistorySettings(document.getElementById("history-settings").getAttribute("aria-expanded") !== "true");
+    }
+    function closeHistorySettings() {
+        setHistorySettings(false);
+        document.getElementById("history-settings").focus();
+    }
+    function saveHistoryChoice(choice) {
+        historyChoice = choice;
+        try {
+            localStorage.setItem("chat_cookie_consent", choice);
+        } catch {
+            // The choice applies until this page is closed.
+        }
+        closeHistorySettings();
+    }
+    function acceptCookies() {
+        saveHistoryChoice("accepted");
+    }
+    function declineCookies() {
+        saveHistoryChoice("declined");
+    }
+
+    async function loadHistory() {
+        if (historyChoice !== "accepted") return;
+        const status = document.getElementById("history-feedback");
+        status.textContent = "กำลังโหลดประวัติการสนทนา…";
+        try {
+            const res = await fetch(`${window.API_BASE}/chat/history`, {
+                credentials: "include",
+                signal: AbortSignal.timeout(10000)
+            });
+            if (!res.ok) throw new Error("History unavailable");
+            const data = await res.json();
+            status.textContent = "";
+
+            // session หมดอายุ — เคลียร์ consent และแสดง banner ใหม่
+            if (data.session_expired) {
+                return;
+            }
+
+            if (data.history && data.history.length && !chat.querySelector(".msg-row")
+                && historyChoice === "accepted") {
+                chat.replaceChildren(status);
+                data.history.forEach(m => addMessage(m.content, m.role === "user" ? "user" : "bot", m.created_at));
+            }
+        } catch {
+            status.textContent = "โหลดประวัติไม่ได้ คุณยังส่งคำถามใหม่ได้";
+        }
+    }
+
+    window.addEventListener("pagehide", (e) => {
+        if (!e.persisted) {
+            document.cookie = "session_id=; Max-Age=0; path=/; SameSite=None; Secure";
+        }
+    });
+
+    const mobileSidebar = window.matchMedia("(max-width: 768px)");
+
+    function setSidebar(open) {
+        const sidebar = document.getElementById("sidebar");
+        const backdrop = document.getElementById("sidebarBackdrop");
+        sidebar.classList.toggle("hidden", !open);
+        sidebar.inert = !open;
+        document.querySelector(".chat-container").inert = open && mobileSidebar.matches;
+        backdrop.classList.toggle("active", open);
+        document.querySelector(".toggle-sidebar").setAttribute("aria-expanded", String(open));
+    }
+
+    function toggleSidebar() {
+        const open = document.getElementById("sidebar").classList.contains("hidden");
+        setSidebar(open);
+        if (mobileSidebar.matches) {
+            document.querySelector(open ? ".close-sidebar" : ".toggle-sidebar").focus();
+        }
+    }
+
+    window.onload = () => {
+        checkCookieConsent();
+        loadHistory();
+
+        // ปิด sidebar อัตโนมัติตอนเปิดหน้าบนมือถือ
+        setSidebar(!mobileSidebar.matches);
+    };
+    mobileSidebar.addEventListener("change", () => setSidebar(!mobileSidebar.matches));
+    document.addEventListener("keydown", event => {
+        if (event.key !== "Escape") return;
+        const toggle = document.querySelector(".toggle-sidebar");
+        if (mobileSidebar.matches && toggle.getAttribute("aria-expanded") === "true") {
+            setSidebar(false);
+            toggle.focus();
+        } else if (document.getElementById("history-settings").getAttribute("aria-expanded") === "true") {
+            closeHistorySettings();
+        } else if (toggle.getAttribute("aria-expanded") === "true") {
+            setSidebar(false);
+            toggle.focus();
+        }
+    });
+
+</script>
+
 </body>
 </html>

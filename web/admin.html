@@ -12,7 +12,7 @@
 <body>
 
 <div id="wrapper">
-    <nav id="sidebar">
+    <nav id="sidebar" aria-label="เมนูเจ้าหน้าที่">
         <div class="sidebar-brand">
             <span class="staff-mark" aria-hidden="true"></span><div><strong>เทศบาลเมืองศิลา</strong><small>สำหรับเจ้าหน้าที่</small></div>
         </div>
@@ -26,13 +26,15 @@
 
     <div id="page-content">
         <header class="topbar d-flex justify-content-between align-items-center">
-            <button class="btn btn-light border" onclick="toggleSidebar(this)" aria-controls="sidebar" aria-expanded="false" aria-label="แสดงหรือซ่อนเมนู">
+            <button class="btn btn-light border" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="แสดงหรือซ่อนเมนู">
                 <svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#menu"></use></svg>
             </button>
-            <div class="text-end">
+            <div class="staff-actions">
                 <a class="public-link" href="/"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#chat"></use></svg> ไปยังหน้าแชต</a>
+                <button class="btn btn-outline-secondary btn-sm" type="button" id="sign-out">ออกจากระบบ</button>
             </div>
         </header>
+        <p id="staff-status" class="staff-status" role="status"></p>
 
         <main class="container-fluid staff-content">
             <div class="page-heading"><h1>จัดการเอกสาร</h1><p>เพิ่ม PDF ที่ผู้ช่วยเทศบาลใช้ค้นและอ้างอิงในคำตอบ</p></div>
@@ -75,16 +77,19 @@
                         </select>
                     </div>
                     <div class="col-md-3 align-self-end">
-                        <button class="btn btn-primary w-100" id="uploadBtn" onclick="uploadPDF()">
+                        <button class="btn btn-primary w-100" id="uploadBtn" onclick="uploadPDF()" disabled>
                             <svg class="icon me-1" aria-hidden="true" focusable="false"><use href="/icons.svg#upload"></use></svg> อัปโหลด
                         </button>
                     </div>
                 </div>
 
                 <div class="progress" id="progressWrapper">
-                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" aria-label="ความคืบหน้าการอัปโหลด" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="width: 0%"></div>
                 </div>
-                <small id="uploadStatus" role="status" class="text-muted mt-2 d-block"></small>
+                <div class="upload-feedback">
+                    <small id="uploadStatus" role="status" class="text-muted mt-2 d-block"></small>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="cancel-upload" hidden>หยุดส่งไฟล์</button>
+                </div>
             </div>
 
             <section class="document-section" aria-label="เอกสารในระบบ">
@@ -121,6 +126,15 @@
                         <small id="filterCount" class="text-muted text-nowrap"></small>
                     </div>
                 </div>
+                <div class="retry-panel">
+                    <p class="section-status" id="documents-status" role="status"></p>
+                    <div class="delete-review" id="delete-review" hidden>
+                        <p id="delete-message" role="status"></p>
+                        <button class="btn btn-outline-secondary" id="cancel-delete" type="button">ยกเลิกการลบ</button>
+                        <button class="btn btn-danger" id="confirm-delete" type="button">ลบถาวร</button>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="reload-documents" hidden>ลองโหลดอีกครั้ง</button>
+                </div>
                 <div class="table-responsive">
                     <table class="table custom-table">
                         <thead>
@@ -132,8 +146,7 @@
                                 <th class="text-end">การจัดการ</th>
                             </tr>
                         </thead>
-                        <tbody id="pdfList">
-                            </tbody>
+                        <tbody id="pdfList"></tbody>
                     </table>
                 </div>
             </section>
@@ -141,24 +154,27 @@
     </div>
 </div>
 <script src="/config.js"></script>
+<script src="/staff.js"></script>
 <script>
+    const uploadButton = document.getElementById("uploadBtn");
+    const cancelUpload = document.getElementById("cancel-upload");
+    const listStatus = document.getElementById("documents-status");
+    const reloadButton = document.getElementById("reload-documents");
+    let transmitting = null;
+    cancelUpload.addEventListener("click", () => transmitting?.abort());
+
     async function checkAuth() {
         try {
-            try {
-                sessionStorage.removeItem("admin_auth");
-            } catch {
-                // Cookie authentication does not require web storage.
-            }
-            const res = await fetch(`${window.API_BASE}/api/check-admin`, { credentials: "include" });
-            if (!res.ok) throw new Error("Session check unavailable");
+            const res = await staffFetch("/api/check-admin");
             const status = await res.json();
             if (!status.authenticated) {
                 window.location.replace("/login.html");
                 return false;
             }
             return true;
-        } catch (e) {
-            document.getElementById("uploadStatus").textContent = "ตรวจเซสชันไม่ได้ กรุณาโหลดหน้าใหม่";
+        } catch {
+            listStatus.textContent = "ตรวจเซสชันไม่ได้ กรุณาลองโหลดอีกครั้ง";
+            reloadButton.hidden = false;
             return false;
         }
     }
@@ -212,7 +228,7 @@
                         <button type="button" class="btn btn-sm btn-outline-primary" aria-label="ดูเอกสาร">
                             <svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#eye"></use></svg> <span>ดู</span>
                         </button>
-                        <button type="button" class="btn btn-sm btn-outline-success" aria-label="ดาวน์โหลดเอกสาร">
+                        <button type="button" class="btn btn-sm btn-outline-primary" aria-label="ดาวน์โหลดเอกสาร">
                             <svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#download"></use></svg> <span>ดาวน์โหลด</span>
                         </button>
                         <button type="button" class="btn btn-sm btn-outline-danger" aria-label="ลบเอกสาร">
@@ -229,7 +245,7 @@
             const [view, download, remove] = row.querySelectorAll("button");
             view.addEventListener("click", () => window.open(downloadUrl, "_blank", "noopener"));
             download.addEventListener("click", () => window.location.assign(downloadUrl));
-            remove.addEventListener("click", () => deletePDF(encodedSource, displayName));
+            remove.addEventListener("click", () => deletePDF(encodedSource, displayName, remove));
             tbody.appendChild(row);
         });
     }
@@ -237,7 +253,7 @@
     function uploadPDF() {
         const fileInput = document.getElementById("pdfFile");
         const file = fileInput.files[0];
-        const button = document.getElementById("uploadBtn");
+        const button = uploadButton;
         const progressWrapper = document.getElementById("progressWrapper");
         const progressBar = document.getElementById("progressBar");
         const statusText = document.getElementById("uploadStatus");
@@ -260,42 +276,64 @@
         formData.append("file", file);
         formData.append("category", document.getElementById("category").value);
 
+        if (button.disabled) return;
         button.disabled = true;
         progressWrapper.style.display = "flex";
         progressBar.style.width = "0%";
+        progressBar.setAttribute("aria-valuenow", "0");
         setStatus("กำลังอัปโหลดไฟล์…");
 
         const xhr = new XMLHttpRequest();
+        transmitting = xhr;
+        cancelUpload.hidden = false;
+        function endTransmission() {
+            if (transmitting === xhr) transmitting = null;
+            cancelUpload.hidden = true;
+        }
         xhr.upload.addEventListener("progress", event => {
             if (event.lengthComputable) {
                 const percent = Math.round(event.loaded / event.total * 100);
                 progressBar.style.width = `${percent}%`;
-                setStatus(`กำลังอัปโหลด ${percent}%`);
+                progressBar.setAttribute("aria-valuenow", String(percent));
+                if (event.loaded >= event.total) endTransmission();
             }
         });
         xhr.upload.addEventListener("load", () => {
-            setStatus("กำลังอ่านข้อความและเพิ่มเอกสารเข้าฐานความรู้…");
+            endTransmission();
+            setStatus("ส่งไฟล์แล้ว กำลังรอระบบอ่านข้อความและเพิ่มเข้าฐานความรู้…");
         });
         xhr.addEventListener("load", () => {
             if (xhr.status === 200) {
                 setStatus(xhr.response?.message || "เพิ่มเอกสารเข้าฐานความรู้แล้ว", "success");
                 fileInput.value = "";
                 loadPDFs();
+                refreshStaffUsage();
             } else if (xhr.status === 401) {
-                setStatus("กรุณาเข้าสู่ระบบอีกครั้ง", "danger");
+                window.location.replace("/login.html");
             } else {
                 setStatus(xhr.response?.error || "ประมวลผลเอกสารไม่สำเร็จ กรุณาลองใหม่", "danger");
             }
         });
         xhr.addEventListener("error", () => {
             setStatus("การเชื่อมต่อขาดหาย กรุณาตรวจรายการเอกสารก่อนลองใหม่", "danger");
+            loadPDFs();
+        });
+        xhr.addEventListener("timeout", () => {
+            setStatus("ระบบใช้เวลานาน กรุณาตรวจรายการเอกสารก่อนลองอัปโหลดอีกครั้ง", "danger");
+            loadPDFs();
+        });
+        xhr.addEventListener("abort", () => {
+            setStatus("หยุดการส่งจากเบราว์เซอร์แล้ว กำลังตรวจรายการเอกสารอีกครั้ง");
+            loadPDFs();
         });
         xhr.addEventListener("loadend", () => {
+            endTransmission();
             progressWrapper.style.display = "none";
             button.disabled = false;
         });
 
         xhr.open("POST", `${window.API_BASE}/upload-pdf`);
+        xhr.timeout = 180000;
         xhr.responseType = "json";
         xhr.withCredentials = true;
         xhr.send(formData);
@@ -303,46 +341,90 @@
     // --- ฟังก์ชันโหลดรายการไฟล์ ---
     async function loadPDFs() {
         const tbody = document.getElementById("pdfList");
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center">กำลังโหลดข้อมูล...</td></tr>';
+        const categoryFilter = document.getElementById("filterCategory");
+        reloadButton.hidden = true;
+        categoryFilter.disabled = true;
+        listStatus.textContent = "กำลังโหลดรายการเอกสาร…";
+        tbody.replaceChildren();
 
         try {
-            const res = await fetch(`${window.API_BASE}/pdfs`, { credentials: "include" });
-            if (!res.ok) throw new Error("Document list unavailable");
+            const res = await staffFetch("/pdfs");
             const data = await res.json();
             allDocs = data.files || [];
-            document.getElementById("filterCategory").value = "";
-            document.getElementById("filterCount").textContent = `${allDocs.length} รายการ`;
-            renderTable(allDocs);
-        } catch (e) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">ไม่สามารถโหลดข้อมูลได้</td></tr>';
+            categoryFilter.disabled = false;
+            filterByCategory();
+            listStatus.textContent = "";
+        } catch {
+            document.getElementById("filterCount").textContent = "";
+            listStatus.textContent = "โหลดรายการเอกสารไม่สำเร็จ";
+            reloadButton.hidden = false;
         }
     }
 
-    async function deletePDF(encodedSource, displayName) {
-        if (!confirm(`ยืนยันการลบไฟล์: ${displayName}?`)) return;
+    const deleteReview = document.getElementById("delete-review");
+    const cancelDelete = document.getElementById("cancel-delete");
+    const confirmDelete = document.getElementById("confirm-delete");
+    let pendingDelete = null;
+
+    function deletePDF(encodedSource, displayName, button) {
+        if (confirmDelete.disabled) return;
+        if (pendingDelete) pendingDelete.button.disabled = false;
+        pendingDelete = {encodedSource, button};
+        button.disabled = true;
+        document.getElementById("delete-message").textContent = `ลบ «${displayName}» ออกจากคลังเอกสาร? หลังลบแล้วจะกู้คืนจากหน้านี้ไม่ได้`;
+        deleteReview.hidden = false;
+        cancelDelete.focus();
+    }
+
+    function closeDeleteReview(restoreFocus = false) {
+        const button = pendingDelete?.button;
+        if (button) button.disabled = false;
+        pendingDelete = null;
+        deleteReview.hidden = true;
+        if (restoreFocus) button?.focus();
+    }
+
+    cancelDelete.addEventListener("click", () => {
+        closeDeleteReview(true);
+        listStatus.textContent = "ยกเลิกแล้ว เอกสารยังอยู่ในคลัง";
+    });
+    deleteReview.addEventListener("keydown", event => {
+        if (event.key === "Escape" && !cancelDelete.disabled) cancelDelete.click();
+    });
+
+    confirmDelete.addEventListener("click", async () => {
+        if (!pendingDelete) return;
+        const {encodedSource} = pendingDelete;
         const status = document.getElementById("uploadStatus");
+        const message = document.getElementById("delete-message");
+        confirmDelete.disabled = true;
+        cancelDelete.disabled = true;
+        message.textContent = "กำลังลบเอกสาร…";
         try {
-            const response = await fetch(`${window.API_BASE}/pdf/${encodedSource}`, {
-                method: "DELETE",
-                credentials: "include",
-            });
-            if (!response.ok) throw new Error("Delete request failed");
+            await staffFetch(`/pdf/${encodedSource}`, {method: "DELETE"});
             status.textContent = "ลบเอกสารแล้ว";
-            loadPDFs();
+            await loadPDFs();
+            refreshStaffUsage();
         } catch {
             status.textContent = "ยืนยันผลการลบไม่ได้ กรุณาโหลดรายการใหม่ก่อนลองอีกครั้ง";
+            reloadButton.hidden = false;
+        } finally {
+            closeDeleteReview();
+            confirmDelete.disabled = false;
+            cancelDelete.disabled = false;
+        }
+    });
+
+    async function loadStaffDocuments() {
+        reloadButton.hidden = true;
+        listStatus.textContent = "กำลังตรวจเซสชัน…";
+        if (await checkAuth()) {
+            uploadButton.disabled = false;
+            await loadPDFs();
         }
     }
-
-    function toggleSidebar(button) {
-        const sidebar = document.getElementById("sidebar");
-        const open = sidebar.classList.toggle("mobile-open");
-        button.setAttribute("aria-expanded", String(open));
-    }
-    checkAuth().then(authenticated => {
-        if (authenticated) loadPDFs();
-        else document.getElementById("uploadBtn").disabled = true;
-    });
+    reloadButton.addEventListener("click", loadStaffDocuments);
+    loadStaffDocuments();
 </script>
 </body>
 </html>

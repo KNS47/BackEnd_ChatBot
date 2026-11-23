@@ -28,7 +28,7 @@
 
 <div id="wrapper">
 
-    <div id="sidebar">
+    <nav id="sidebar" aria-label="เมนูเจ้าหน้าที่">
         <div class="sidebar-brand">
             <span class="staff-mark" aria-hidden="true"></span><div><strong>เทศบาลเมืองศิลา</strong><small>สำหรับเจ้าหน้าที่</small></div>
         </div>
@@ -38,18 +38,20 @@
         <a href="/stats.html" class="sidebar-link active" aria-current="page">
             <svg class="icon me-2" aria-hidden="true" focusable="false"><use href="/icons.svg#chart"></use></svg> สถิติการใช้งาน
         </a>
-    </div>
+    </nav>
 
     <div id="page-content">
 
         <header class="topbar d-flex justify-content-between align-items-center">
-            <button class="btn btn-light border" onclick="toggleSidebar(this)" aria-controls="sidebar" aria-expanded="false" aria-label="แสดงหรือซ่อนเมนู">
+            <button class="btn btn-light border" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="แสดงหรือซ่อนเมนู">
                 <svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#menu"></use></svg>
             </button>
-            <div class="text-end">
+            <div class="staff-actions">
                 <a class="public-link" href="/"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#chat"></use></svg> ไปยังหน้าแชต</a>
+                <button class="btn btn-outline-secondary btn-sm" type="button" id="sign-out">ออกจากระบบ</button>
             </div>
         </header>
+        <p id="staff-status" class="staff-status" role="status"></p>
 
         <main class="container-fluid staff-content">
             <div class="page-heading"><h1>สถิติการใช้งาน</h1><p>ดูการสนทนาที่ผู้ใช้เลือกบันทึกประวัติ</p></div>
@@ -82,7 +84,7 @@
                     <div class="stat-card">
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
-                                <h6 class="text-muted">หมวดหมู่ทั้งหมด</h6>
+                                <h6 class="text-muted">หมวดหมู่ในช่วงที่เลือก</h6>
                                 <h3 id="totalCategories" class="mb-0"><span class="skeleton"></span></h3>
                             </div>
                             <svg class="icon text-warning fs-2" aria-hidden="true" focusable="false"><use href="/icons.svg#folder"></use></svg>
@@ -92,7 +94,7 @@
             </div>
 
             <!-- Filter Bar -->
-            <div class="stat-card">
+            <form class="stat-card" id="stats-filters">
                 <div class="row g-3 align-items-end">
                     <div class="col-md-3">
                         <label class="form-label" for="startDate">วันที่เริ่มต้น</label>
@@ -109,12 +111,13 @@
                         </select>
                     </div>
                     <div class="col-md-3">
-                        <button class="btn btn-primary w-100" onclick="loadAll()">
+                        <button class="btn btn-primary w-100" type="submit" id="show-stats">
                             <svg class="icon me-1" aria-hidden="true" focusable="false"><use href="/icons.svg#search"></use></svg> ดูสถิติ
                         </button>
                     </div>
                 </div>
-            </div>
+                <p class="section-status" id="stats-status" role="status"></p>
+            </form>
 
             <!-- Charts Row -->
             <div class="row">
@@ -123,6 +126,7 @@
 
                             <h5 class="mb-3"><svg class="icon text-primary me-2" aria-hidden="true" focusable="false"><use href="/icons.svg#chart"></use></svg>จำนวนคำถามรายวัน</h5>
                             <canvas role="img" aria-label="กราฟจำนวนคำถามรายวัน" id="dailyChart" height="120"></canvas>
+                            <p class="chart-empty" id="dailyChart-note" hidden></p>
 
                     </div>
                 </div>
@@ -131,6 +135,7 @@
 
                             <h5 class="mb-3"><svg class="icon text-warning me-2" aria-hidden="true" focusable="false"><use href="/icons.svg#pie"></use></svg>สัดส่วนหมวดหมู่</h5>
                             <canvas role="img" aria-label="กราฟสัดส่วนหมวดหมู่" id="categoryChart" height="240"></canvas>
+                            <p class="chart-empty" id="categoryChart-note" hidden></p>
 
                     </div>
                 </div>
@@ -140,6 +145,7 @@
             <div class="stat-card">
                 <h5 class="mb-3"><svg class="icon text-success me-2" aria-hidden="true" focusable="false"><use href="/icons.svg#users"></use></svg>จำนวนผู้ใช้ต่อวัน</h5>
                 <canvas role="img" aria-label="กราฟผู้ใช้รายวัน" id="userChart" height="100"></canvas>
+                <p class="chart-empty" id="userChart-note" hidden></p>
             </div>
 
             <!-- Top Questions Table -->
@@ -164,38 +170,37 @@
     </div>
 </div>
 <script src="/config.js"></script>
+<script src="/staff.js"></script>
 <script>
-    const API = window.API_BASE;
-
-    try {
-        sessionStorage.removeItem("admin_auth");
-    } catch {
-        // Cookie authentication does not require web storage.
-    }
-
-    async function authFetch(url) {
-        const response = await fetch(url, {credentials: "include"});
-        if (response.status === 401) window.location.replace("/login.html");
-        if (!response.ok) throw new Error("Analytics unavailable");
-        return response;
-    }
-
-    const THEME_COLOR = '#22737c';
-    const THEME_COLOR_LIGHT = 'rgba(34, 115, 124, 0.12)';
-    const SUCCESS_COLOR = '#497c76';
-    const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+    const THEME_COLOR = "#603581";
+    const THEME_COLOR_LIGHT = "rgba(21, 77, 163, 0.12)";
+    const USER_COLOR = "#8d627f";
+    const PIE_COLORS = ["#603581", "#8c628c", "#967126", "#7b5082", "#2f6876", "#7784a5", "#90634f"];
+    const filters = document.getElementById("stats-filters");
+    const showStats = document.getElementById("show-stats");
+    const statsStatus = document.getElementById("stats-status");
 
     let trendChart, userChart, catChart;
+    let categoriesLoaded = false;
+
+    function chartStatus(id, message) {
+        const canvas = document.getElementById(id);
+        const note = document.getElementById(`${id}-note`);
+        canvas.hidden = Boolean(message);
+        note.hidden = !message;
+        note.textContent = message;
+    }
 
     // ---- ดึงรายการหมวดหมู่จาก API เพื่อ populate dropdown ----
     async function loadCategoriesList() {
         try {
-            const res = await authFetch(`${API}/analytics/categories-list`);
+            const res = await staffFetch("/analytics/categories-list");
             const data = await res.json();
             const select = document.getElementById("categoryFilter");
 
             // reset
             select.innerHTML = '<option value="all">ทุกหมวด</option>';
+            categoriesLoaded = true;
 
             if (!Array.isArray(data) || data.length === 0) {
                 select.innerHTML += '<option disabled>— ไม่มีข้อมูลหมวดหมู่ —</option>';
@@ -207,10 +212,10 @@
                 opt.textContent = cat;
                 select.appendChild(opt);
             });
-        } catch (e) {
-            console.error("loadCategoriesList error:", e);
+        } catch {
             document.getElementById("categoryFilter").innerHTML =
                 '<option value="all">ทุกหมวด</option>';
+            throw new Error("Category list unavailable");
         }
     }
 
@@ -257,16 +262,17 @@
 
         try {
             const query = new URLSearchParams(f).toString();
-            const res = await authFetch(`${API}/analytics/summary?${query}`);
+            const res = await staffFetch(`/analytics/summary?${query}`);
             const data = await res.json();
 
             document.getElementById("totalCategories").innerText = data.total_categories ?? "-";
             document.getElementById("totalQuestions").innerText = data.total_questions ?? 0;
             document.getElementById("totalUsers").innerText = data.total_users ?? 0;
-        } catch (e) {
+        } catch {
             ["totalQuestions", "totalUsers", "totalCategories"].forEach(id => {
                 document.getElementById(id).innerText = "-";
             });
+            throw new Error("Summary unavailable");
         }
     }
 
@@ -274,11 +280,12 @@
         const f = getFilters();
         const query = new URLSearchParams({ category: f.category, start: f.start, end: f.end }).toString();
         try {
-            const res = await authFetch(`${API}/analytics/last7days?${query}`);
+            const res = await staffFetch(`/analytics/last7days?${query}`);
             const data = await res.json();
-            if (!Array.isArray(data)) return;
+            if (!Array.isArray(data)) throw new Error("Unexpected trend data");
 
             if (trendChart) trendChart.destroy();
+            chartStatus("dailyChart", "");
             trendChart = new Chart(document.getElementById("dailyChart"), {
                 type: "line",
                 data: {
@@ -298,23 +305,27 @@
                     responsive: true,
                     plugins: { legend: { display: false } },
                     scales: {
-                        y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#f3f4f6' } },
+                        y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#eee4dd' } },
                         x: { grid: { display: false } }
                     }
                 }
             });
-        } catch (e) { console.error("loadTrend error:", e); }
+        } catch {
+            chartStatus("dailyChart", "โหลดกราฟจำนวนคำถามไม่สำเร็จ");
+            throw new Error("Question chart unavailable");
+        }
     }
 
     async function loadUsersTrend() {
         const f = getFilters();
         const query = new URLSearchParams({ start: f.start, end: f.end }).toString();
         try {
-            const res = await authFetch(`${API}/analytics/users?${query}`);
+            const res = await staffFetch(`/analytics/users?${query}`);
             const data = await res.json();
-            if (!Array.isArray(data)) return;
+            if (!Array.isArray(data)) throw new Error("Unexpected user data");
 
             if (userChart) userChart.destroy();
+            chartStatus("userChart", "");
             userChart = new Chart(document.getElementById("userChart"), {
                 type: "bar",
                 data: {
@@ -322,7 +333,7 @@
                     datasets: [{
                         label: "ผู้ใช้ต่อวัน",
                         data: data.map(d => d.users),
-                        backgroundColor: SUCCESS_COLOR,
+                        backgroundColor: USER_COLOR,
                         borderRadius: 6
                     }]
                 },
@@ -330,12 +341,15 @@
                     responsive: true,
                     plugins: { legend: { display: false } },
                     scales: {
-                        y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#f3f4f6' } },
+                        y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#eee4dd' } },
                         x: { grid: { display: false } }
                     }
                 }
             });
-        } catch (e) { console.error("loadUsersTrend error:", e); }
+        } catch {
+            chartStatus("userChart", "โหลดกราฟจำนวนผู้ใช้ไม่สำเร็จ");
+            throw new Error("User chart unavailable");
+        }
     }
 
     async function loadTopQuestions() {
@@ -344,7 +358,7 @@
         const table = document.getElementById("categoryTable");
         table.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-3">กำลังโหลด...</td></tr>';
         try {
-            const res = await authFetch(`${API}/analytics/top-questions?${query}`);
+            const res = await staffFetch(`/analytics/top-questions?${query}`);
             const data = await res.json();
 
             table.innerHTML = "";
@@ -359,8 +373,9 @@
                 count.className = "text-center fw-bold";
                 count.textContent = d.count;
             });
-        } catch (e) {
+        } catch {
             table.innerHTML = '<tr><td colspan="2" class="text-center text-danger py-3">โหลดข้อมูลไม่สำเร็จ</td></tr>';
+            throw new Error("Question list unavailable");
         }
     }
 
@@ -368,11 +383,16 @@
         const f = getFilters();
         const query = new URLSearchParams({ start: f.start, end: f.end }).toString();
         try {
-            const res = await authFetch(`${API}/analytics/category-breakdown?${query}`);
+            const res = await staffFetch(`/analytics/category-breakdown?${query}`);
             const data = await res.json();
-            if (!Array.isArray(data)) return;
+            if (!Array.isArray(data)) throw new Error("Unexpected category data");
 
             if (catChart) catChart.destroy();
+            if (data.length === 0) {
+                chartStatus("categoryChart", "ยังไม่มีข้อมูลหมวดหมู่ในช่วงนี้");
+                return;
+            }
+            chartStatus("categoryChart", "");
             catChart = new Chart(document.getElementById("categoryChart"), {
                 type: "doughnut",
                 data: {
@@ -393,21 +413,32 @@
                     }
                 }
             });
-        } catch (e) { console.error("loadCategoryChart error:", e); }
+        } catch {
+            chartStatus("categoryChart", "โหลดกราฟหมวดหมู่ไม่สำเร็จ");
+            throw new Error("Category chart unavailable");
+        }
     }
 
-    function loadAll() {
-        loadSummary();
-        loadTrend();
-        loadTopQuestions();
-        loadUsersTrend();
-        loadCategoryChart();
-    }
-
-    function toggleSidebar(button) {
-        const sidebar = document.getElementById("sidebar");
-        const open = sidebar.classList.toggle("mobile-open");
-        button.setAttribute("aria-expanded", String(open));
+    async function loadAll(event) {
+        event?.preventDefault();
+        if (showStats.disabled) return;
+        const {start, end} = getFilters();
+        if (start && end && (end < start || Date.parse(end) - Date.parse(start) >= 366 * 86400000)) {
+            statsStatus.textContent = "เลือกวันที่ตามลำดับ และเลือกช่วงไม่เกิน 366 วัน";
+            return;
+        }
+        showStats.disabled = true;
+        filters.setAttribute("aria-busy", "true");
+        statsStatus.textContent = "กำลังโหลดสถิติ…";
+        const results = await Promise.allSettled([
+            loadSummary(), loadTrend(), loadTopQuestions(), loadUsersTrend(), loadCategoryChart(),
+            categoriesLoaded ? Promise.resolve() : loadCategoriesList(),
+        ]);
+        showStats.disabled = false;
+        filters.removeAttribute("aria-busy");
+        statsStatus.textContent = results.some(result => result.status === "rejected")
+            ? "โหลดสถิติได้ไม่ครบ กดดูสถิติเพื่อลองใหม่"
+            : "อัปเดตสถิติแล้ว";
     }
 
     function bangkokToday() {
@@ -420,11 +451,8 @@
     document.getElementById("startDate").value = todayStr;
     document.getElementById("endDate").value = todayStr;
 
-    // โหลด categories ก่อน แล้วโหลดข้อมูล
-    loadCategoriesList().then(() => loadAll());
-
-    // auto refresh ทุก 30 วินาที
-    setInterval(loadAll, 30000);
+    filters.addEventListener("submit", loadAll);
+    loadAll();
 </script>
 
 </body>

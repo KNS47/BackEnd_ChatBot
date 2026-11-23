@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from itertools import count
 
 import httpx
+from usage_counter import add_generation_usage
 
 from config import API_KEYS
 
@@ -150,6 +151,7 @@ async def generate_answer(
         options["responseMimeType"] = "application/json"
         options["responseSchema"] = response_schema
     result = await _request("generateContent", GENERATION_MODELS, body)
+    add_generation_usage(result)
     candidates = result.get("candidates") or []
     if candidates:
         parts = candidates[0].get("content", {}).get("parts", [])

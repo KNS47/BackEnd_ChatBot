@@ -1,4 +1,7 @@
 .env
+.env.*
+!.env.example
+google-cloud.json
 .venv/
 __pycache__/
 *.pyc

@@ -38,7 +38,8 @@ form.addEventListener("submit", async event => {
         errorBox.hidden = false;
     };
     submit.disabled = true;
-    status.textContent = "กำลังเข้าสู่ระบบ";
+    submit.querySelector("span").textContent = "กำลังเข้าสู่ระบบ…";
+    status.textContent = "กำลังเข้าสู่ระบบ…";
     errorBox.hidden = true;
     const abort = new AbortController();
     const timeout = setTimeout(() => abort.abort(), 15000);
@@ -74,6 +75,7 @@ form.addEventListener("submit", async event => {
     } finally {
         clearTimeout(timeout);
         status.textContent = "";
+        submit.querySelector("span").textContent = "เข้าสู่ระบบ";
         submit.disabled = false;
     }
 });

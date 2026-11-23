@@ -1,4 +1,6 @@
 .git
 .env
+.env.*
+google-cloud.json
 .venv
 **/__pycache__

@@ -28,9 +28,10 @@ class ReleaseSecurityTests(unittest.TestCase):
                     self.assertEqual(client.get("/pdfs").status_code, 401)
 
     @patch.object(limiter, "enabled", False)
+    @patch.object(chat, "record_usage")
     @patch.object(chat, "_save_messages")
     @patch.object(chat, "_answer", new_callable=AsyncMock)
-    def test_chat_size_and_opt_in(self, answer, save):
+    def test_chat_size_and_opt_in(self, answer, save, usage):
         answer.return_value = ("Verified answer", "Contact")
         save.side_effect = RuntimeError("Storage unavailable")
         with TestClient(app, base_url="https://municipal.example") as client:
@@ -41,3 +42,4 @@ class ReleaseSecurityTests(unittest.TestCase):
             opt_in = client.post("/chat", json={"message": "Hello", "no_save": False})
             self.assertEqual(opt_in.json(), {"answer": "Verified answer", "history_saved": False})
             save.assert_called_once()
+            self.assertEqual(usage.call_count, 2)

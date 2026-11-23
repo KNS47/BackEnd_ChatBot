@@ -80,6 +80,7 @@ class ChatQualityTests(unittest.IsolatedAsyncioTestCase):
             patch.object(chat, "_history") as stored_history,
             patch.object(chat, "_save_messages") as save,
             patch.object(chat, "_record_analytics") as analytics,
+            patch.object(chat, "record_usage") as usage,
         ):
             result = client.post("/chat", json={
                 "message": "ใช้เอกสารอะไร",
@@ -96,6 +97,7 @@ class ChatQualityTests(unittest.IsolatedAsyncioTestCase):
         stored_history.assert_not_called()
         save.assert_not_called()
         analytics.assert_not_called()
+        usage.assert_called_once_with(1, 0)
 
     async def test_gemini_pool_reuse_and_model_fallback(self):
         requests = []

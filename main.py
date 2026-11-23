@@ -9,7 +9,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from ai import gemini_lifespan
 from config import COOKIE_SAMESITE, COOKIE_SECURE, FRONTEND_ORIGINS, SESSION_SECRET
 from middleware import limiter, rate_limit_handler
-from routes import analytics, auth, chat, pdf
+from routes import analytics, auth, chat, pdf, usage
 
 app = FastAPI(lifespan=gemini_lifespan)
 app.state.limiter = limiter
@@ -40,6 +40,7 @@ app.include_router(auth.router)
 app.include_router(chat.router)
 app.include_router(pdf.router)
 app.include_router(analytics.router)
+app.include_router(usage.router)
 
 web = Path(__file__).with_name("web")
 if (web / "index.html").is_file():
