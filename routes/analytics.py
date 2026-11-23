@@ -1,239 +1,121 @@
-from fastapi import APIRouter, Depends, Query
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from database import supabase
 from routes.auth import verify_admin
 
-router = APIRouter()
-
-def parse_dt(ts: str) -> "datetime":
-    """แก้ปัญหา Python 3.10 ไม่รองรับ microseconds ที่ไม่ครบ 6 หลัก"""
-    ts = ts.replace("Z", "+00:00")
-    if "." in ts:
-        dot_idx = ts.index(".")
-        plus_idx = ts.find("+", dot_idx)
-        frac = ts[dot_idx+1:plus_idx if plus_idx != -1 else len(ts)]
-        frac = frac.ljust(6, "0")[:6]
-        tz = ts[plus_idx:] if plus_idx != -1 else ""
-        ts = ts[:dot_idx+1] + frac + tz
-    return datetime.fromisoformat(ts)
+router = APIRouter(dependencies=[Depends(verify_admin)])
+BANGKOK = timezone(timedelta(hours=7), "Asia/Bangkok")
+PAGE_SIZE = 500
+MAX_DAYS = 366
 
 
-def get_date_range(start: str, end: str):
-    """แปลง start/end string เป็น date object พร้อม fallback"""
-    today = datetime.utcnow().date()
+def _date_range(start: str | None, end: str | None, *, default_days: int = 1) -> tuple[date, date]:
+    today = datetime.now(BANGKOK).date()
     try:
-        date_start = datetime.strptime(start, "%Y-%m-%d").date() if start else today
-        date_end = datetime.strptime(end, "%Y-%m-%d").date() if end else today
-    except ValueError:
-        date_start = date_end = today
-    return date_start, date_end
+        first = date.fromisoformat(start) if start else None
+        last = date.fromisoformat(end) if end else None
+    except ValueError as exc:
+        raise HTTPException(422, "ระบุวันที่ในรูปแบบ YYYY-MM-DD") from exc
+
+    if first is None and last is None:
+        return today - timedelta(days=default_days - 1), today
+    first = first or last
+    last = last or first
+    if first == date.min or last == date.max or last < first or (last - first).days >= MAX_DAYS:
+        raise HTTPException(422, f"เลือกช่วงวันที่ตามลำดับและไม่เกิน {MAX_DAYS} วัน")
+    return first, last
 
 
-# -----------------------
-# Summary Dashboard
-# -----------------------
-@router.get("/analytics/summary", dependencies=[Depends(verify_admin)])
-async def analytics_summary(
-    start: str = Query(None),
-    end: str = Query(None),
-    category: str = Query(None)
+def _utc_midnight(day: date) -> str:
+    return datetime.combine(day, time.min, BANGKOK).astimezone(timezone.utc).replace(tzinfo=None).isoformat()
+
+
+def _bangkok_day(value: str) -> date:
+    stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return stamp.astimezone(BANGKOK).date()
+
+
+def _rows(
+    table: str,
+    fields: str,
+    dates: tuple[date, date] | None = None,
+    category: str | None = None,
 ):
-    q = supabase.table("chat_analytics").select("category, created_at").execute()
-    sessions = supabase.table("chat_sessions").select("id, created_at").execute()
+    cursor = None
+    while True:
+        query = supabase.table(table).select(f"id,{fields}").order("id").limit(PAGE_SIZE)
+        if dates:
+            first, last = dates
+            query = query.gte("created_at", _utc_midnight(first)).lt(
+                "created_at", _utc_midnight(last + timedelta(days=1))
+            )
+        if category and category != "all":
+            query = query.eq("category", category)
+        if cursor is not None:
+            query = query.gt("id", cursor)
+        rows = query.execute().data or []
+        if not rows:
+            break
+        yield from rows
+        cursor = rows[-1]["id"]
 
-    data = q.data or []
-    session_data = sessions.data or []
 
-    date_start, date_end = get_date_range(start, end)
+def _by_day(rows, dates: tuple[date, date], count_key: str) -> list[dict]:
+    counts = Counter(_bangkok_day(row["created_at"]) for row in rows)
+    first, last = dates
+    days = (first + timedelta(days=offset) for offset in range((last - first).days + 1))
+    return [{"date": str(day), count_key: counts[day]} for day in days]
 
-    filtered_questions = [
-        r for r in data
-        if r.get("created_at") and
-        date_start <= parse_dt(r["created_at"]).date() <= date_end and
-        (not category or category == "all" or r.get("category") == category)
-    ]
 
-    filtered_users = {
-        r["id"]
-        for r in session_data
-        if r.get("created_at") and
-        date_start <= parse_dt(r["created_at"]).date() <= date_end
-    }
-
-    categories = set([r["category"] for r in data if r.get("category")])
-
+@router.get("/analytics/summary")
+def analytics_summary(start: str | None = None, end: str | None = None, category: str | None = None):
+    dates = _date_range(start, end)
+    counts = Counter(row["category"] for row in _rows("chat_analytics", "category", dates, category))
     return {
-        "total_questions": len(filtered_questions),
-        "total_users": len(filtered_users),
-        "total_categories": len(categories)
+        "total_questions": counts.total(),
+        "total_users": sum(1 for _ in _rows("chat_sessions", "created_at", dates)),
+        "total_categories": sum(bool(key) for key in counts),
     }
 
 
-# -----------------------
-# Questions Trend (by date range, default 7 days)
-# -----------------------
-@router.get("/analytics/last7days", dependencies=[Depends(verify_admin)])
-async def last7days(
-    start: str = Query(None),
-    end: str = Query(None),
-    category: str = Query(None)
+@router.get("/analytics/last7days")
+def last7days(start: str | None = None, end: str | None = None, category: str | None = None):
+    dates = _date_range(start, end, default_days=7)
+    return _by_day(_rows("chat_analytics", "created_at", dates, category), dates, "count")
+
+
+@router.get("/analytics/users")
+def users_per_day(start: str | None = None, end: str | None = None):
+    dates = _date_range(start, end, default_days=7)
+    return _by_day(_rows("chat_sessions", "created_at", dates), dates, "users")
+
+
+@router.get("/analytics/category-breakdown")
+def category_breakdown(start: str | None = None, end: str | None = None):
+    dates = _date_range(start, end) if start or end else None
+    counts = Counter(row["category"] for row in _rows("chat_analytics", "category", dates) if row["category"])
+    return [{"category": name, "count": count} for name, count in counts.most_common()]
+
+
+@router.get("/analytics/top-questions")
+def top_questions(
+    limit: int = Query(10, ge=1, le=100),
+    start: str | None = None,
+    end: str | None = None,
+    category: str | None = None,
 ):
-    result = supabase.table("chat_analytics") \
-        .select("created_at, category") \
-        .execute()
-
-    rows = result.data or []
-
-    today = datetime.utcnow().date()
-    date_start, date_end = get_date_range(start, end)
-
-    # ถ้าไม่มี filter ให้แสดง 7 วันย้อนหลัง
-    if not start and not end:
-        date_start = today - timedelta(days=6)
-        date_end = today
-
-    num_days = (date_end - date_start).days + 1
-    counts = {date_start + timedelta(days=i): 0 for i in range(num_days)}
-
-    for r in rows:
-        if not r.get("created_at"):
-            continue
-        if category and category != "all" and r.get("category") != category:
-            continue
-        d = parse_dt(r["created_at"]).date()
-        if d in counts:
-            counts[d] += 1
-
-    return [
-        {"date": str(d), "count": counts[d]}
-        for d in sorted(counts)
-    ]
+    dates = _date_range(start, end) if start or end else None
+    counts = Counter(
+        row["question"] for row in _rows("chat_analytics", "question", dates, category) if row["question"]
+    )
+    return [{"question": question, "count": count} for question, count in counts.most_common(limit)]
 
 
-# -----------------------
-# Users per day (by date range, default 7 days)
-# -----------------------
-@router.get("/analytics/users", dependencies=[Depends(verify_admin)])
-async def users_per_day(
-    start: str = Query(None),
-    end: str = Query(None)
-):
-    result = supabase.table("chat_sessions") \
-        .select("id, created_at") \
-        .execute()
-
-    rows = result.data or []
-
-    today = datetime.utcnow().date()
-    date_start, date_end = get_date_range(start, end)
-
-    if not start and not end:
-        date_start = today - timedelta(days=6)
-        date_end = today
-
-    num_days = (date_end - date_start).days + 1
-    counts = {date_start + timedelta(days=i): 0 for i in range(num_days)}
-
-    for r in rows:
-        if not r.get("created_at"):
-            continue
-        d = parse_dt(r["created_at"]).date()
-        if d in counts:
-            counts[d] += 1
-
-    return [
-        {"date": str(d), "users": counts[d]}
-        for d in sorted(counts)
-    ]
-
-
-# -----------------------
-# Category Breakdown (by date range)
-# -----------------------
-@router.get("/analytics/category-breakdown", dependencies=[Depends(verify_admin)])
-async def category_breakdown(
-    start: str = Query(None),
-    end: str = Query(None)
-):
-    result = supabase.table("chat_analytics") \
-        .select("category, created_at") \
-        .execute()
-
-    rows = result.data or []
-
-    date_start, date_end = get_date_range(start, end)
-
-    # ถ้าไม่มี filter ให้แสดงทั้งหมด
-    if start or end:
-        rows = [
-            r for r in rows
-            if r.get("created_at") and
-            date_start <= parse_dt(r["created_at"]).date() <= date_end
-        ]
-
-    categories = [r["category"] for r in rows if r.get("category")]
-    counter = Counter(categories)
-
-    return [
-        {"category": c, "count": n}
-        for c, n in counter.most_common()
-    ]
-
-
-# -----------------------
-# Top Questions (by date range + category)
-# -----------------------
-@router.get("/analytics/top-questions", dependencies=[Depends(verify_admin)])
-async def top_questions(
-    limit: int = 10,
-    start: str = Query(None),
-    end: str = Query(None),
-    category: str = Query(None)
-):
-    result = supabase.table("chat_analytics") \
-        .select("question, category, created_at") \
-        .execute()
-
-    rows = result.data or []
-
-    date_start, date_end = get_date_range(start, end)
-
-    filtered = []
-    for r in rows:
-        if not r.get("question"):
-            continue
-        if start or end:
-            if not r.get("created_at"):
-                continue
-            if not (date_start <= parse_dt(r["created_at"]).date() <= date_end):
-                continue
-        if category and category != "all" and r.get("category") != category:
-            continue
-        filtered.append(r["question"])
-
-    counter = Counter(filtered)
-
-    return [
-        {"question": q, "count": c}
-        for q, c in counter.most_common(limit)
-    ]
-
-
-# -----------------------
-# Categories List
-# -----------------------
-@router.get("/analytics/categories-list", dependencies=[Depends(verify_admin)])
-async def categories_list():
-    result = supabase.table("chat_analytics") \
-        .select("category") \
-        .execute()
-
-    rows = result.data or []
-
-    categories = sorted(list(set([
-        r["category"] for r in rows if r.get("category")
-    ])))
-
-    return categories
+@router.get("/analytics/categories-list")
+def categories_list():
+    return sorted({row["category"] for row in _rows("chat_analytics", "category") if row["category"]})

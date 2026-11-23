@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>เข้าสู่ระบบเจ้าหน้าที่ | เทศบาลเมืองศิลา</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/login.css">
+  <script src="/config.js" defer></script>
+  <script src="/login.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <a href="/"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#back"></use></svg> กลับหน้าผู้ช่วยเทศบาล</a>
+      <div class="entry-brand"><span class="entry-mark" aria-hidden="true"></span><div><strong>เทศบาลเมืองศิลา</strong><small>อำเภอเมืองขอนแก่น</small></div></div>
+    </header>
+    <form id="login-form">
+      <div class="entry-title"><h1>เข้าสู่ระบบเจ้าหน้าที่</h1><p>จัดการเอกสารและดูสถิติการใช้งานผู้ช่วยเทศบาล</p></div>
+      <label for="username">ชื่อผู้ใช้</label>
+      <input id="username" name="username" autocomplete="username" required>
+      <label for="password">รหัสผ่าน</label>
+      <div class="password-field">
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button type="button" id="toggle-password" aria-controls="password" aria-pressed="false"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#eye"></use></svg> <span>แสดงรหัสผ่าน</span></button>
+      </div>
+      <p id="error" role="alert" hidden></p>
+      <button id="submit" type="submit"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#login"></use></svg> เข้าสู่ระบบ</button>
+      <p class="sr-only" id="login-status" role="status"></p>
+    </form>
+  </main>
+</body>
+</html>

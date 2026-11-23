@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: sila-municipal-chat
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        value: pdfs
+      - key: AI_PROVIDER
+        value: vertex
+      - key: GOOGLE_CLOUD_PROJECT
+        sync: false
+      - key: GOOGLE_CLOUD_LOCATION
+        value: global
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/google-cloud.json
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_SAMESITE
+        value: lax

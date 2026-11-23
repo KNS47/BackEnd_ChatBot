@@ -1,76 +1,161 @@
-import random
 import asyncio
 import logging
-import google.generativeai as genai
+import math
+import os
+from contextlib import asynccontextmanager
+from itertools import count
+
+import httpx
+
 from config import API_KEYS
 
 logger = logging.getLogger(__name__)
+BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+EMBEDDING_MODEL = "gemini-embedding-001"
+EMBEDDING_DIMENSIONS = 3072
+AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini").strip().lower()
+if AI_PROVIDER not in {"gemini", "vertex"}:
+    raise ValueError("Set AI_PROVIDER to gemini or vertex")
+GENERATION_MODELS = tuple(dict.fromkeys(
+    model.strip()
+    for model in os.getenv(
+        "GEMINI_GENERATION_MODELS", "gemini-3.5-flash-lite,gemini-3.1-flash-lite"
+    ).split(",")
+    if model.strip()
+))
+_keys = tuple(dict.fromkeys(key.strip() for key in API_KEYS if key.strip()))
+_next_key = count()
+_client: httpx.AsyncClient | None = None
+if AI_PROVIDER == "vertex":
+    from vertex_ai import VertexTransport
 
-current_index = random.randint(0, len(API_KEYS) - 1)
-
-GENERATION_MODELS = [
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-flash",
-]
-
-
-def _use_key(index: int) -> None:
-    genai.configure(api_key=API_KEYS[index].strip())
+    _vertex = VertexTransport(
+        os.getenv("GOOGLE_CLOUD_PROJECT", "").strip(),
+        os.getenv("GOOGLE_CLOUD_LOCATION", "global").strip(),
+    )
+else:
+    _vertex = None
 
 
-# ---------------------------------------------------------------------------
-# embed_text — async (run sync SDK in thread pool ไม่บล็อก event loop)
-# ---------------------------------------------------------------------------
-async def embed_text(text: str) -> list:
-    global current_index
-    last_error = None
+class AIUnavailable(RuntimeError):
+    pass
 
-    for i in range(len(API_KEYS)):
-        idx = (current_index + i) % len(API_KEYS)
+
+def _new_client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(timeout=httpx.Timeout(7.0, connect=3.0))
+
+
+@asynccontextmanager
+async def gemini_lifespan(app):
+    global _client
+    async with _new_client() as client:
+        _client = client
         try:
-            def _sync_embed():
-                _use_key(idx)
-                result = genai.embed_content(
-                    model="gemini-embedding-001",
-                    content=text,
-                )
-                return result["embedding"]
-
-            embedding = await asyncio.get_event_loop().run_in_executor(None, _sync_embed)
-            current_index = idx
-            return embedding
-
-        except Exception as e:
-            last_error = e
-            logger.warning(f"embed_text key[{idx}] error: {e}")
-
-    raise last_error
+            yield
+        finally:
+            _client = None
 
 
-# ---------------------------------------------------------------------------
-# generate_answer — async (run sync SDK in thread pool ไม่บล็อก event loop)
-# ---------------------------------------------------------------------------
-async def generate_answer(prompt: str) -> str:
-    global current_index
-    last_error = None
+async def _request(action: str, models: tuple[str, ...], body: dict) -> dict:
+    if _vertex is not None:
+        from vertex_ai import VertexUnavailable
 
-    for k in range(len(API_KEYS)):
-        key_index = (current_index + k) % len(API_KEYS)
+        try:
+            if _client is not None:
+                return await _vertex.request(_client, action, models, body)
+            async with _new_client() as client:
+                return await _vertex.request(client, action, models, body)
+        except VertexUnavailable as exc:
+            raise AIUnavailable(str(exc)) from None
+    if not _keys or not models:
+        raise AIUnavailable("Gemini credentials or models are missing")
+    if _client is not None:
+        return await _try_request(_client, action, models, body)
+    async with _new_client() as client:
+        return await _try_request(client, action, models, body)
 
-        for model_name in GENERATION_MODELS:
+
+async def _try_request(
+    client: httpx.AsyncClient, action: str, models: tuple[str, ...], body: dict,
+) -> dict:
+    start = next(_next_key) % len(_keys)
+    ordered_keys = _keys[start:] + _keys[:start]
+    attempts = 0
+    for key in ordered_keys:
+        for model in models:
+            if attempts >= 4:
+                raise AIUnavailable("Gemini exhausted its fallback attempts")
+            attempts += 1
             try:
-                def _sync_generate(ki=key_index, mn=model_name):
-                    _use_key(ki)
-                    model = genai.GenerativeModel(mn)
-                    response = model.generate_content(prompt)
-                    return response.text
+                response = await asyncio.wait_for(
+                    client.post(
+                        f"{BASE_URL}/{model}:{action}",
+                        headers={"x-goog-api-key": key},
+                        json=body,
+                    ),
+                    timeout=8,
+                )
+                response.raise_for_status()
+                payload = response.json()
+                if isinstance(payload, dict):
+                    return payload
+                logger.warning("Gemini %s/%s returned an unexpected payload", model, action)
+            except httpx.HTTPStatusError as exc:
+                status = exc.response.status_code
+                logger.warning("Gemini %s/%s returned HTTP %s", model, action, status)
+                if status == 401:
+                    break
+            except (httpx.HTTPError, asyncio.TimeoutError, ValueError) as exc:
+                logger.warning("Gemini %s/%s failed: %s", model, action, type(exc).__name__)
+    raise AIUnavailable("Gemini did not return a usable response")
 
-                text = await asyncio.get_event_loop().run_in_executor(None, _sync_generate)
-                current_index = key_index
-                return text
 
-            except Exception as e:
-                last_error = e
-                logger.warning(f"generate_answer key[{key_index}] model[{model_name}] error: {e}")
+async def embed_text(text: str) -> list[float]:
+    # Keep the existing corpus model, default task and default dimensions.
+    if _vertex is not None:
+        result = await _request("predict", (EMBEDDING_MODEL,), {
+            "instances": [{"content": text}],
+            "parameters": {"outputDimensionality": EMBEDDING_DIMENSIONS, "autoTruncate": False},
+        })
+        predictions = result.get("predictions")
+        if not isinstance(predictions, list) or not predictions or not isinstance(predictions[0], dict):
+            raise AIUnavailable("Vertex returned an invalid embedding")
+        embedding = predictions[0].get("embeddings")
+        values = embedding.get("values") if isinstance(embedding, dict) else None
+        if not isinstance(values, list) or len(values) != EMBEDDING_DIMENSIONS or not all(
+            type(value) in {int, float} and math.isfinite(value) for value in values
+        ):
+            raise AIUnavailable("Vertex returned an invalid embedding")
+        return values
+    body = {"model": f"models/{EMBEDDING_MODEL}", "content": {"parts": [{"text": text}]}}
+    result = await _request("embedContent", (EMBEDDING_MODEL,), body)
+    values = result.get("embedding", {}).get("values")
+    if not isinstance(values, list) or not values:
+        raise AIUnavailable("Gemini returned an empty embedding")
+    return values
 
-    raise last_error
+
+async def generate_answer(
+    prompt: str,
+    *,
+    instructions: str | None = None,
+    response_schema: dict | None = None,
+    token_limit: int = 1200,
+) -> str:
+    options = {"maxOutputTokens": token_limit}
+    body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": options}
+    if instructions:
+        body["systemInstruction"] = {"parts": [{"text": instructions}]}
+    if response_schema:
+        options["responseMimeType"] = "application/json"
+        options["responseSchema"] = response_schema
+    result = await _request("generateContent", GENERATION_MODELS, body)
+    candidates = result.get("candidates") or []
+    if candidates:
+        parts = candidates[0].get("content", {}).get("parts", [])
+        answer = "".join(
+            part.get("text", "") for part in parts if not part.get("thought")
+        ).strip()
+        if answer and candidates[0].get("finishReason") in (None, "STOP"):
+            return answer
+    raise AIUnavailable("Gemini returned an incomplete answer")

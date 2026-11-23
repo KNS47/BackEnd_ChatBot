@@ -1,80 +1,85 @@
-from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, Depends
-from fastapi.responses import JSONResponse, RedirectResponse
-from typing import List
-import os
+import asyncio
+import logging
 import uuid
 from urllib.parse import unquote
 
+from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi.responses import JSONResponse, RedirectResponse
+
 from database import supabase
-from pdf_service import process_pdf_background
+from pdf_service import BUCKET_NAME, MAX_PDF_BYTES, PdfError, index_pdf
 from routes.auth import verify_admin
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+index_slot = asyncio.Lock()
 
-BUCKET_NAME = "pdfs"  # ชื่อ bucket ใน Supabase Storage
 
-
-# -----------------------
-# Upload PDF
-# -----------------------
 @router.post("/upload-pdf", dependencies=[Depends(verify_admin)])
-async def upload_pdf(
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-    category: str = Form(...)
-):
-    if not file.filename.endswith(".pdf"):
-        return {"error": "รองรับเฉพาะไฟล์ PDF เท่านั้น"}
+async def upload_pdf(file: UploadFile = File(...), category: str = Form(...)):
+    original_name = file.filename or ""
+    if not original_name.lower().endswith(".pdf"):
+        return JSONResponse(status_code=415, content={"error": "รองรับเฉพาะไฟล์ PDF"})
+    category = category.strip()
+    if not category:
+        return JSONResponse(status_code=422, content={"error": "กรุณาระบุหมวดหมู่เอกสาร"})
 
-    original_name = file.filename                          # ชื่อที่แสดงให้ user เห็น
-    unique_name = f"{uuid.uuid4()}.pdf"                    # ชื่อจริงใน storage (UUID เท่านั้น)
+    if index_slot.locked():
+        return JSONResponse(
+            status_code=429,
+            content={"error": "กำลังเพิ่มเอกสารอีกไฟล์ กรุณารอให้เสร็จแล้วลองใหม่"},
+        )
 
-    file_bytes = await file.read()
+    filename = f"{uuid.uuid4()}.pdf"
+    try:
+        async with index_slot:
+            file_bytes = await file.read(MAX_PDF_BYTES + 1)
+            if len(file_bytes) > MAX_PDF_BYTES:
+                return JSONResponse(status_code=413, content={"error": "รองรับไฟล์ไม่เกิน 20 MB"})
+            if b"%PDF-" not in file_bytes[:1024]:
+                return JSONResponse(status_code=415, content={"error": "ไฟล์นี้ไม่ใช่ PDF"})
+            count = await index_pdf(file_bytes, filename, category, original_name)
+    except PdfError as exc:
+        return JSONResponse(status_code=exc.status_code, content={"error": str(exc)})
+    except Exception:
+        logger.exception("PDF indexing failed for %s", filename)
+        return JSONResponse(
+            status_code=503,
+            content={"error": "ประมวลผลเอกสารไม่สำเร็จ กรุณาลองใหม่"},
+        )
 
-    # อัปโหลดขึ้น Supabase Storage
-    upload_res = supabase.storage.from_(BUCKET_NAME).upload(
-        path=unique_name,
-        file=file_bytes,
-        file_options={"content-type": "application/pdf"}
-    )
-
-    if hasattr(upload_res, "error") and upload_res.error:
-        return JSONResponse(status_code=500, content={"error": "อัปโหลดไฟล์ไม่สำเร็จ"})
-
-    # เก็บ mapping: unique_name (storage key) <-> original_name (display)
-    background_tasks.add_task(
-        process_pdf_background,
-        file_bytes,        # ส่ง bytes แทน path
-        unique_name,       # storage key (UUID)
-        category,
-        original_name      # ชื่อที่แสดง — process_pdf_background ต้องรับ param นี้เพิ่ม
-    )
-
-    return {"message": "อัปโหลดสำเร็จ กำลังประมวลผล..."}
+    return {"message": "เพิ่มเอกสารเข้าฐานความรู้แล้ว", "chunks": count}
 
 
 # -----------------------
 # List PDFs
 # -----------------------
 @router.get("/pdfs", dependencies=[Depends(verify_admin)])
-async def list_pdfs():
-
-    result = supabase.table("documents") \
-        .select("source, original_name, category") \
-        .execute()
-
-    if not result.data:
-        return {"files": []}
-
+def list_pdfs():
     seen = {}
-    for row in result.data:
-        key = row["source"]
-        if key not in seen:
-            seen[key] = {
-                "source": key,
-                "original_name": row.get("original_name") or key,  # fallback
-                "category": row["category"]
-            }
+    cursor = None
+    while True:
+        query = (
+            supabase.table("documents")
+            .select("id, source, original_name, category")
+            .not_.is_("source", "null")
+            .order("id")
+            .limit(500)
+        )
+        if cursor is not None:
+            query = query.gt("id", cursor)
+        rows = query.execute().data
+        if not rows:
+            break
+        for row in rows:
+            key = row["source"]
+            if key not in seen:
+                seen[key] = {
+                    "source": key,
+                    "original_name": row.get("original_name") or key,
+                    "category": row["category"],
+                }
+        cursor = rows[-1]["id"]
 
     return {"files": list(seen.values())}
 
@@ -83,7 +88,7 @@ async def list_pdfs():
 # View / Download PDF  (redirect ไป Supabase signed URL)
 # -----------------------
 @router.get("/pdfs/download/{filename}", dependencies=[Depends(verify_admin)])
-async def download_pdf(filename: str):
+def download_pdf(filename: str):
 
     filename = unquote(filename)
 
@@ -104,7 +109,7 @@ async def download_pdf(filename: str):
 # Delete PDF
 # -----------------------
 @router.delete("/pdf/{filename}", dependencies=[Depends(verify_admin)])
-async def delete_pdf(filename: str):
+def delete_pdf(filename: str):
 
     filename = unquote(filename)
 

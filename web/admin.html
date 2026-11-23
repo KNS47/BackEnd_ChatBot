@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>สำหรับเจ้าหน้าที่ — ระบบจัดการเอกสาร</title>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/admin.css">
+
+</head>
+<body>
+
+<div id="wrapper">
+    <nav id="sidebar">
+        <div class="sidebar-brand">
+            <span class="staff-mark" aria-hidden="true"></span><div><strong>เทศบาลเมืองศิลา</strong><small>สำหรับเจ้าหน้าที่</small></div>
+        </div>
+        <a href="/admin.html" class="sidebar-link active" aria-current="page">
+            <svg class="icon me-2" aria-hidden="true" focusable="false"><use href="/icons.svg#folder"></use></svg> จัดการเอกสาร
+        </a>
+        <a href="/stats.html" class="sidebar-link">
+            <svg class="icon me-2" aria-hidden="true" focusable="false"><use href="/icons.svg#chart"></use></svg> สถิติการใช้งาน
+        </a>
+    </nav>
+
+    <div id="page-content">
+        <header class="topbar d-flex justify-content-between align-items-center">
+            <button class="btn btn-light border" onclick="toggleSidebar(this)" aria-controls="sidebar" aria-expanded="false" aria-label="แสดงหรือซ่อนเมนู">
+                <svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#menu"></use></svg>
+            </button>
+            <div class="text-end">
+                <a class="public-link" href="/"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#chat"></use></svg> ไปยังหน้าแชต</a>
+            </div>
+        </header>
+
+        <main class="container-fluid staff-content">
+            <div class="page-heading"><h1>จัดการเอกสาร</h1><p>เพิ่ม PDF ที่ผู้ช่วยเทศบาลใช้ค้นและอ้างอิงในคำตอบ</p></div>
+            <div class="stat-card">
+                <h2 class="section-heading">เพิ่มเอกสาร</h2><p class="section-hint">รองรับ PDF สูงสุด 20 MB รวมถึงเอกสารสแกน</p>
+                <div class="row g-3">
+                    <div class="col-md-5">
+                        <label class="form-label" for="pdfFile">ไฟล์ PDF</label>
+                        <input type="file" class="form-control" id="pdfFile" accept=".pdf,application/pdf">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="category">หมวดหมู่เอกสาร</label>
+                        <select class="form-select" id="category">
+                            <option value="ข้อมูลการบริหารงาน">ข้อมูลการบริหารงาน</option>
+                            <option value="ข้อมูลหน่วยตรวจสอบภายใน">ข้อมูลหน่วยตรวจสอบภายใน</option>
+                            <option value="ข้อมูลกองการเจ้าหน้าที่">ข้อมูลกองการเจ้าหน้าที่</option>
+                            <option value="ข้อมูลกองสวัสดิการสังคม">ข้อมูลกองสวัสดิการสังคม</option>
+
+                            <option value="ข้อมูลกองการศึกษา">ข้อมูลกองการศึกษา</option>
+                            <option value="ข้อมูลกองยุทธศาสตร์และงบประมาณ">ข้อมูลกองยุทธศาสตร์และงบประมาณ</option>
+                            <option value="ข้อมูลกองสาธารณสุขและสิ่งแวดล้อม">ข้อมูลกองสาธารณสุขและสิ่งแวดล้อม</option>
+                            <option value="ข้อมูลกองช่าง">ข้อมูลกองช่าง</option>
+
+                            <option value="ข้อมูลกองคลัง">ข้อมูลกองคลัง</option>
+                            <option value="ข้อมูลสำนักปลัดเทศบาล">ข้อมูลสำนักปลัดเทศบาล</option>
+                            <option value="ข้อมูลฝ่ายบริหาร">ข้อมูลฝ่ายบริหาร</option>
+                            <option value="ข้อมูลพื้นฐาน">ข้อมูลพื้นฐาน</option>
+
+                            <option value="ข้อมูลการให้บริการประชาชน">ข้อมูลการให้บริการประชาชน</option>
+                            <option value="ศูนย์ข้อมูลข่าวสาร">ศูนย์ข้อมูลข่าวสาร</option>
+                            <option value="ข้อมูลมาตรการความ">ข้อมูลมาตรการความ</option>
+                            <option value="โปร่งใสการจัดการทุจริต">โปร่งใสการจัดการทุจริต</option>
+
+                            <option value="ข้อมูลการดำเนินการเพื่อป้องกันการทุจริต">ข้อมูลการดำเนินการเพื่อป้องกันการทุจริต</option>
+                            <option value="ข้อมูลการจัดซื้อจัดจ้าง">ข้อมูลการจัดซื้อจัดจ้าง</option>
+                            <option value="ข้อมูลการบริหารและพัฒนาทรัพยากรบุคคล">ข้อมูลการบริหารและพัฒนาทรัพยากรบุคคล</option>
+                            <option value="ข้อมูลการบริหารเงินงบประมาณ">ข้อมูลการบริหารเงินงบประมาณ</option>
+
+                            <option value="ข้อมูลทำนุบำรุงรักษา">ข้อมูลทำนุบำรุงรักษา</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 align-self-end">
+                        <button class="btn btn-primary w-100" id="uploadBtn" onclick="uploadPDF()">
+                            <svg class="icon me-1" aria-hidden="true" focusable="false"><use href="/icons.svg#upload"></use></svg> อัปโหลด
+                        </button>
+                    </div>
+                </div>
+
+                <div class="progress" id="progressWrapper">
+                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                </div>
+                <small id="uploadStatus" role="status" class="text-muted mt-2 d-block"></small>
+            </div>
+
+            <section class="document-section" aria-label="เอกสารในระบบ">
+                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                    <h2 class="section-heading mb-0">
+                        <svg class="icon me-2" aria-hidden="true" focusable="false"><use href="/icons.svg#folder"></use></svg> เอกสารในระบบ
+                    </h2>
+                    <div class="d-flex align-items-center gap-2">
+                        <svg class="icon text-muted" aria-hidden="true" focusable="false"><use href="/icons.svg#filter"></use></svg>
+                        <select class="form-select form-select-sm" id="filterCategory" aria-label="กรองตามหมวดหมู่" onchange="filterByCategory()">
+                            <option value="">ทั้งหมด</option>
+                            <option value="ข้อมูลการบริหารงาน">ข้อมูลการบริหารงาน</option>
+                            <option value="ข้อมูลหน่วยตรวจสอบภายใน">ข้อมูลหน่วยตรวจสอบภายใน</option>
+                            <option value="ข้อมูลกองการเจ้าหน้าที่">ข้อมูลกองการเจ้าหน้าที่</option>
+                            <option value="ข้อมูลกองสวัสดิการสังคม">ข้อมูลกองสวัสดิการสังคม</option>
+                            <option value="ข้อมูลกองการศึกษา">ข้อมูลกองการศึกษา</option>
+                            <option value="ข้อมูลกองยุทธศาสตร์และงบประมาณ">ข้อมูลกองยุทธศาสตร์และงบประมาณ</option>
+                            <option value="ข้อมูลกองสาธารณสุขและสิ่งแวดล้อม">ข้อมูลกองสาธารณสุขและสิ่งแวดล้อม</option>
+                            <option value="ข้อมูลกองช่าง">ข้อมูลกองช่าง</option>
+                            <option value="ข้อมูลกองคลัง">ข้อมูลกองคลัง</option>
+                            <option value="ข้อมูลสำนักปลัดเทศบาล">ข้อมูลสำนักปลัดเทศบาล</option>
+                            <option value="ข้อมูลฝ่ายบริหาร">ข้อมูลฝ่ายบริหาร</option>
+                            <option value="ข้อมูลพื้นฐาน">ข้อมูลพื้นฐาน</option>
+                            <option value="ข้อมูลการให้บริการประชาชน">ข้อมูลการให้บริการประชาชน</option>
+                            <option value="ศูนย์ข้อมูลข่าวสาร">ศูนย์ข้อมูลข่าวสาร</option>
+                            <option value="ข้อมูลมาตรการความ">ข้อมูลมาตรการความ</option>
+                            <option value="โปร่งใสการจัดการทุจริต">โปร่งใสการจัดการทุจริต</option>
+                            <option value="ข้อมูลการดำเนินการเพื่อป้องกันการทุจริต">ข้อมูลการดำเนินการเพื่อป้องกันการทุจริต</option>
+                            <option value="ข้อมูลการจัดซื้อจัดจ้าง">ข้อมูลการจัดซื้อจัดจ้าง</option>
+                            <option value="ข้อมูลการบริหารและพัฒนาทรัพยากรบุคคล">ข้อมูลการบริหารและพัฒนาทรัพยากรบุคคล</option>
+                            <option value="ข้อมูลการบริหารเงินงบประมาณ">ข้อมูลการบริหารเงินงบประมาณ</option>
+                            <option value="ข้อมูลทำนุบำรุงรักษา">ข้อมูลทำนุบำรุงรักษา</option>
+                        </select>
+                        <small id="filterCount" class="text-muted text-nowrap"></small>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table custom-table">
+                        <thead>
+                            <tr>
+                                <th>ชื่อเอกสาร</th>
+                                <th class="text-center">ประเภท</th>
+                                <th class="text-center">หมวดหมู่</th>
+                                <th class="text-center">สถานะ</th>
+                                <th class="text-end">การจัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pdfList">
+                            </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+</div>
+<script src="/config.js"></script>
+<script>
+    async function checkAuth() {
+        try {
+            try {
+                sessionStorage.removeItem("admin_auth");
+            } catch {
+                // Cookie authentication does not require web storage.
+            }
+            const res = await fetch(`${window.API_BASE}/api/check-admin`, { credentials: "include" });
+            if (!res.ok) throw new Error("Session check unavailable");
+            const status = await res.json();
+            if (!status.authenticated) {
+                window.location.replace("/login.html");
+                return false;
+            }
+            return true;
+        } catch (e) {
+            document.getElementById("uploadStatus").textContent = "ตรวจเซสชันไม่ได้ กรุณาโหลดหน้าใหม่";
+            return false;
+        }
+    }
+    // --- เก็บข้อมูลเอกสารทั้งหมดไว้ filter ---
+    let allDocs = [];
+
+    function filterByCategory() {
+        const selected = document.getElementById("filterCategory").value;
+        const filtered = selected ? allDocs.filter(d => d.category === selected) : allDocs;
+        renderTable(filtered);
+        const count = document.getElementById("filterCount");
+        count.textContent = selected ? `แสดง ${filtered.length} จาก ${allDocs.length} รายการ` : `${allDocs.length} รายการ`;
+    }
+
+    function renderTable(docs) {
+        const tbody = document.getElementById("pdfList");
+        tbody.innerHTML = "";
+
+        if (docs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">ไม่พบเอกสารในหมวดหมู่นี้</td></tr>';
+            return;
+        }
+
+        docs.forEach((doc) => {
+            const file = doc.source;
+            const displayName = doc.original_name || file;
+            const category = doc.category;
+            const ext = displayName.split('.').pop().toUpperCase();
+
+            const row = document.createElement("tr");
+            row.innerHTML = `
+                <td>
+                    <div class="d-flex align-items-center">
+                        <svg class="icon pdf-icon" aria-hidden="true" focusable="false"><use href="/icons.svg#document"></use></svg>
+                        <div>
+                            <div class="fw-bold text-dark"></div>
+                        </div>
+                    </div>
+                </td>
+                <td class="text-center">
+                    <span class="badge bg-light text-dark border"></span>
+                </td>
+                <td class="text-center">
+                    <span class="text-secondary"></span>
+                </td>
+                <td class="text-center">
+                    <span class="badge badge-active rounded-pill">ใช้งาน</span>
+                </td>
+                <td class="text-end">
+                    <div class="document-actions">
+                        <button type="button" class="btn btn-sm btn-outline-primary" aria-label="ดูเอกสาร">
+                            <svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#eye"></use></svg> <span>ดู</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-success" aria-label="ดาวน์โหลดเอกสาร">
+                            <svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#download"></use></svg> <span>ดาวน์โหลด</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger" aria-label="ลบเอกสาร">
+                            <svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#trash"></use></svg> <span>ลบ</span>
+                        </button>
+                    </div>
+                </td>
+            `;
+            row.querySelector(".fw-bold").textContent = displayName;
+            row.querySelector(".bg-light").textContent = ext;
+            row.querySelector(".text-secondary").textContent = category;
+            const encodedSource = encodeURIComponent(file);
+            const downloadUrl = `${window.API_BASE}/pdfs/download/${encodedSource}`;
+            const [view, download, remove] = row.querySelectorAll("button");
+            view.addEventListener("click", () => window.open(downloadUrl, "_blank", "noopener"));
+            download.addEventListener("click", () => window.location.assign(downloadUrl));
+            remove.addEventListener("click", () => deletePDF(encodedSource, displayName));
+            tbody.appendChild(row);
+        });
+    }
+
+    function uploadPDF() {
+        const fileInput = document.getElementById("pdfFile");
+        const file = fileInput.files[0];
+        const button = document.getElementById("uploadBtn");
+        const progressWrapper = document.getElementById("progressWrapper");
+        const progressBar = document.getElementById("progressBar");
+        const statusText = document.getElementById("uploadStatus");
+
+        function setStatus(message, tone = "secondary") {
+            statusText.className = `text-${tone} mt-2 d-block`;
+            statusText.textContent = message;
+        }
+
+        if (!file) {
+            setStatus("กรุณาเลือกไฟล์ PDF", "danger");
+            return;
+        }
+        if (file.size > 20 * 1024 * 1024) {
+            setStatus("รองรับไฟล์ไม่เกิน 20 MB", "danger");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("category", document.getElementById("category").value);
+
+        button.disabled = true;
+        progressWrapper.style.display = "flex";
+        progressBar.style.width = "0%";
+        setStatus("กำลังอัปโหลดไฟล์…");
+
+        const xhr = new XMLHttpRequest();
+        xhr.upload.addEventListener("progress", event => {
+            if (event.lengthComputable) {
+                const percent = Math.round(event.loaded / event.total * 100);
+                progressBar.style.width = `${percent}%`;
+                setStatus(`กำลังอัปโหลด ${percent}%`);
+            }
+        });
+        xhr.upload.addEventListener("load", () => {
+            setStatus("กำลังอ่านข้อความและเพิ่มเอกสารเข้าฐานความรู้…");
+        });
+        xhr.addEventListener("load", () => {
+            if (xhr.status === 200) {
+                setStatus(xhr.response?.message || "เพิ่มเอกสารเข้าฐานความรู้แล้ว", "success");
+                fileInput.value = "";
+                loadPDFs();
+            } else if (xhr.status === 401) {
+                setStatus("กรุณาเข้าสู่ระบบอีกครั้ง", "danger");
+            } else {
+                setStatus(xhr.response?.error || "ประมวลผลเอกสารไม่สำเร็จ กรุณาลองใหม่", "danger");
+            }
+        });
+        xhr.addEventListener("error", () => {
+            setStatus("การเชื่อมต่อขาดหาย กรุณาตรวจรายการเอกสารก่อนลองใหม่", "danger");
+        });
+        xhr.addEventListener("loadend", () => {
+            progressWrapper.style.display = "none";
+            button.disabled = false;
+        });
+
+        xhr.open("POST", `${window.API_BASE}/upload-pdf`);
+        xhr.responseType = "json";
+        xhr.withCredentials = true;
+        xhr.send(formData);
+    }
+    // --- ฟังก์ชันโหลดรายการไฟล์ ---
+    async function loadPDFs() {
+        const tbody = document.getElementById("pdfList");
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center">กำลังโหลดข้อมูล...</td></tr>';
+
+        try {
+            const res = await fetch(`${window.API_BASE}/pdfs`, { credentials: "include" });
+            if (!res.ok) throw new Error("Document list unavailable");
+            const data = await res.json();
+            allDocs = data.files || [];
+            document.getElementById("filterCategory").value = "";
+            document.getElementById("filterCount").textContent = `${allDocs.length} รายการ`;
+            renderTable(allDocs);
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">ไม่สามารถโหลดข้อมูลได้</td></tr>';
+        }
+    }
+
+    async function deletePDF(encodedSource, displayName) {
+        if (!confirm(`ยืนยันการลบไฟล์: ${displayName}?`)) return;
+        const status = document.getElementById("uploadStatus");
+        try {
+            const response = await fetch(`${window.API_BASE}/pdf/${encodedSource}`, {
+                method: "DELETE",
+                credentials: "include",
+            });
+            if (!response.ok) throw new Error("Delete request failed");
+            status.textContent = "ลบเอกสารแล้ว";
+            loadPDFs();
+        } catch {
+            status.textContent = "ยืนยันผลการลบไม่ได้ กรุณาโหลดรายการใหม่ก่อนลองอีกครั้ง";
+        }
+    }
+
+    function toggleSidebar(button) {
+        const sidebar = document.getElementById("sidebar");
+        const open = sidebar.classList.toggle("mobile-open");
+        button.setAttribute("aria-expanded", String(open));
+    }
+    checkAuth().then(authenticated => {
+        if (authenticated) loadPDFs();
+        else document.getElementById("uploadBtn").disabled = true;
+    });
+</script>
+</body>
+</html>

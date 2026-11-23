@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="description" content="สอบถามบริการ ข่าวสาร และช่องทางติดต่อเทศบาลเมืองศิลา">
+    <title>ผู้ช่วยเทศบาลเมืองศิลา</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="chat.css">
+    <script src="config.js" defer></script>
+    <script src="chat.js" defer></script>
+</head>
+<body>
+<div class="app">
+    <aside class="sidebar" aria-label="ช่องทางเทศบาล">
+        <a class="brand" href="/" aria-label="หน้าหลักผู้ช่วยเทศบาลเมืองศิลา">
+            <span class="brand-mark" aria-hidden="true"><span></span></span>
+            <div><strong>เทศบาลเมืองศิลา</strong><small>อำเภอเมืองขอนแก่น</small></div>
+        </a>
+        <nav aria-label="บริการออนไลน์">
+            <p class="sidebar-label">ช่องทางบริการ</p>
+            <a class="sidebar-current" href="/" aria-current="page"><span class="control-label"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#chat"></use></svg>ผู้ช่วยเทศบาล</span></a>
+            <a href="https://www.sila-kk.go.th/index.php" target="_blank" rel="noopener noreferrer"><span class="control-label"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#globe"></use></svg>เว็บไซต์เทศบาล</span><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#external"></use></svg></a>
+            <a href="https://www.sila-kk.go.th/link.php?menuid=11" target="_blank" rel="noopener noreferrer"><span class="control-label"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#chat"></use></svg>ร้องเรียน / ร้องทุกข์</span><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#external"></use></svg></a>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="help">
+                <strong>คุยกับเจ้าหน้าที่</strong>
+                <a href="tel:043246505"><span class="control-label"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#phone"></use></svg>043-246505</span></a>
+            </div>
+            <a href="login.html"><span class="control-label"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#login"></use></svg>สำหรับเจ้าหน้าที่</span></a>
+        </div>
+    </aside>
+
+    <main class="workspace">
+        <header class="topbar">
+            <span>ผู้ช่วยเทศบาลเมืองศิลา</span>
+            <details class="mobile-links">
+                <summary><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#phone"></use></svg> ช่องทางติดต่อ</summary>
+                <div class="mobile-menu">
+                    <a href="tel:043246505">โทร 043-246505</a>
+                    <a href="https://www.sila-kk.go.th/index.php" target="_blank" rel="noopener noreferrer">เว็บไซต์เทศบาล ↗</a>
+                    <a href="https://www.sila-kk.go.th/link.php?menuid=11" target="_blank" rel="noopener noreferrer">ร้องเรียน / ร้องทุกข์ ↗</a>
+                    <a href="login.html">สำหรับเจ้าหน้าที่</a>
+                </div>
+            </details>
+            <button id="open-privacy" class="quiet-button" type="button"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#settings"></use></svg> ตั้งค่าประวัติ</button>
+        </header>
+
+        <section id="view" class="view" aria-label="หน้าต่างสนทนา">
+            <div class="conversation">
+                <div id="welcome">
+                    <section class="hero">
+                        <div>
+                            <h1>ถามเรื่องเทศบาล<br>ได้ที่นี่</h1>
+                            <p>ค้นข้อมูลบริการ เอกสาร และช่องทางติดต่อเทศบาลเมืองศิลา</p>
+                        </div>
+                        <div class="hero-art" aria-hidden="true"><span></span><i></i><b></b></div>
+                    </section>
+                    <section class="suggestions" aria-labelledby="suggestions-title">
+                        <h2 id="suggestions-title">ลองถามผู้ช่วย</h2>
+                        <div class="suggestion-grid">
+                            <button type="button" data-question="ขอเอกสารหรือแบบฟอร์มของเทศบาลได้ที่ไหน">
+                                <span class="topic-icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#document"></use></svg></span><div><strong>เอกสารและแบบฟอร์ม</strong><span>ขอเอกสารได้ที่ไหน</span></div>
+                            </button>
+                            <button type="button" data-question="เทศบาลเมืองศิลามีสวัสดิการอะไรบ้าง">
+                                <span class="topic-icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#users"></use></svg></span><div><strong>สวัสดิการประชาชน</strong><span>มีบริการอะไรบ้าง</span></div>
+                            </button>
+                            <button type="button" data-question="ติดตามข่าวประชาสัมพันธ์ของเทศบาลเมืองศิลาได้ที่ไหน">
+                                <span class="topic-icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#news"></use></svg></span><div><strong>ข่าวและประกาศ</strong><span>ติดตามข่าวจากที่ไหน</span></div>
+                            </button>
+                            <button type="button" data-question="ติดต่อเทศบาลเมืองศิลาได้ทางไหนบ้าง">
+                                <span class="topic-icon"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#phone"></use></svg></span><div><strong>ติดต่อเทศบาล</strong><span>เบอร์โทรและช่องทางติดต่อ</span></div>
+                            </button>
+                        </div>
+                    </section>
+                </div>
+                <div id="chat" role="log" aria-label="ข้อความสนทนา"></div>
+                <p id="waiting" role="status" hidden>กำลังค้นข้อมูลเทศบาล…</p>
+                <p id="history-notice" role="status" hidden></p>
+            </div>
+        </section>
+
+        <footer class="composer">
+            <div class="composer-inner">
+                <div id="request-error" class="error" hidden>
+                    <p role="alert" id="error-text"></p>
+                    <button class="quiet-button" type="button" id="retry"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#refresh"></use></svg> ลองอีกครั้ง</button>
+                </div>
+                <form id="message-form">
+                    <label class="sr-only" for="message">คำถามถึงเทศบาลเมืองศิลา</label>
+                    <input id="message" name="message" required maxlength="500" autocomplete="off" placeholder="พิมพ์คำถามของคุณ…">
+                    <button id="send" type="submit">ส่งคำถาม <svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#send"></use></svg></button>
+                </form>
+                <p class="composer-note">หลีกเลี่ยงการส่งเลขบัตรประชาชนหรือข้อมูลส่วนตัว</p>
+            </div>
+        </footer>
+    </main>
+</div>
+
+<template id="copy-answer-template">
+    <button class="copy-answer" type="button"><svg class="icon" aria-hidden="true" focusable="false"><use href="/icons.svg#copy"></use></svg> <span>คัดลอกคำตอบ</span></button>
+</template>
+<dialog id="privacy" aria-labelledby="privacy-title">
+    <form method="dialog">
+        <h2 id="privacy-title">ประวัติการสนทนา</h2>
+        <p>ระบบส่งคำถามและบริบทล่าสุดไปยัง Gemini เพื่อสร้างคำตอบ หากเลือกบันทึก ระบบจะเก็บประวัติเพื่อให้เปิดดูภายหลัง</p>
+        <div class="privacy-actions">
+            <button value="declined" autofocus>ไม่บันทึก</button>
+            <button value="accepted">บันทึกประวัติ</button>
+        </div>
+    </form>
+</dialog>
+</body>
+</html>
