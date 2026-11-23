@@ -248,6 +248,10 @@ function appendAnswer(container, value) {
             });
             const data = await res.json();
             if (request.signal.aborted) throw new Error("Stopped");
+            if (res.status === 429 && data.code === "ai_daily_quota") {
+                showRequestStatus("quota", "ระบบ AI ใช้โควตาวันนี้ครบแล้ว ลองใหม่วันถัดไปหรือดูข้อมูลจากเว็บไซต์เทศบาล");
+                return;
+            }
             if (!res.ok || typeof data.answer !== "string") {
                 throw new Error(typeof data.error === "string" ? data.error : "ส่งคำถามไม่สำเร็จ");
             }

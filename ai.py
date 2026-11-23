@@ -9,14 +9,18 @@ import httpx
 from usage_counter import add_generation_usage
 
 from config import API_KEYS
+from cloudflare_ai import (
+    CloudflareQuotaExceeded, CloudflareTransport, CloudflareUnavailable,
+    DEFAULT_GENERATION_MODEL as CLOUDFLARE_DEFAULT_MODEL,
+)
 
 logger = logging.getLogger(__name__)
 BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 EMBEDDING_MODEL = "gemini-embedding-001"
 EMBEDDING_DIMENSIONS = 3072
 AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini").strip().lower()
-if AI_PROVIDER not in {"gemini", "vertex"}:
-    raise ValueError("Set AI_PROVIDER to gemini or vertex")
+if AI_PROVIDER not in {"gemini", "vertex", "cloudflare"}:
+    raise ValueError("Set AI_PROVIDER to gemini, vertex or cloudflare")
 GENERATION_MODELS = tuple(dict.fromkeys(
     model.strip()
     for model in os.getenv(
@@ -36,10 +40,34 @@ if AI_PROVIDER == "vertex":
     )
 else:
     _vertex = None
+_cloudflare = (
+    CloudflareTransport(
+        os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip(),
+        os.getenv("CLOUDFLARE_API_TOKEN", "").strip(),
+        os.getenv("CLOUDFLARE_GENERATION_MODEL", CLOUDFLARE_DEFAULT_MODEL).strip() or CLOUDFLARE_DEFAULT_MODEL,
+    )
+    if AI_PROVIDER == "cloudflare" else None
+)
 
 
 class AIUnavailable(RuntimeError):
     pass
+
+
+class AIQuotaExceeded(AIUnavailable):
+    pass
+
+
+async def _cloudflare_request(operation, *args):
+    try:
+        if _client is not None:
+            return await operation(_client, *args)
+        async with _new_client() as client:
+            return await operation(client, *args)
+    except CloudflareQuotaExceeded as exc:
+        raise AIQuotaExceeded(str(exc)) from None
+    except CloudflareUnavailable as exc:
+        raise AIUnavailable(str(exc)) from None
 
 
 def _new_client() -> httpx.AsyncClient:
@@ -112,6 +140,8 @@ async def _try_request(
 
 
 async def embed_text(text: str) -> list[float]:
+    if _cloudflare is not None:
+        return await _cloudflare_request(_cloudflare.embed, text)
     # Keep the existing corpus model, default task and default dimensions.
     if _vertex is not None:
         result = await _request("predict", (EMBEDDING_MODEL,), {
@@ -143,6 +173,8 @@ async def generate_answer(
     response_schema: dict | None = None,
     token_limit: int = 1200,
 ) -> str:
+    if _cloudflare is not None:
+        return await _cloudflare_request(_cloudflare.generate, prompt, instructions, response_schema, token_limit)
     options = {"maxOutputTokens": token_limit}
     body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": options}
     if instructions:

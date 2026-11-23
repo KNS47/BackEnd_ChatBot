@@ -12,13 +12,11 @@ services:
       - key: SUPABASE_BUCKET
         value: pdfs
       - key: AI_PROVIDER
-        value: vertex
-      - key: GOOGLE_CLOUD_PROJECT
+        value: cloudflare
+      - key: CLOUDFLARE_ACCOUNT_ID
         sync: false
-      - key: GOOGLE_CLOUD_LOCATION
-        value: global
-      - key: GOOGLE_APPLICATION_CREDENTIALS
-        value: /etc/secrets/google-cloud.json
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
       - key: ADMIN_USERNAME
         sync: false
       - key: ADMIN_PASSWORD

@@ -6,7 +6,7 @@ from threading import Lock
 
 import pymupdf
 
-from ai import embed_text
+from ai import AI_PROVIDER, AIQuotaExceeded, embed_text
 from database import supabase
 from utils import split_text
 
@@ -111,10 +111,15 @@ async def index_pdf(file_bytes: bytes, filename: str, category: str, original_na
     if len(chunks) > MAX_PDF_CHUNKS:
         raise PdfError("ไฟล์มีข้อความมากเกินไป กรุณาแบ่งเอกสารเป็นหลายไฟล์")
     rows = []
+    embedding_column = "embedding_cloudflare" if AI_PROVIDER == "cloudflare" else "embedding"
     for chunk_index, (page_number, chunk) in enumerate(chunks):
+        try:
+            vector = await embed_text(chunk)
+        except AIQuotaExceeded as exc:
+            raise PdfError("บริการ AI ใช้โควตาวันนี้ครบแล้ว กรุณาลองเพิ่มเอกสารวันถัดไป", status_code=429) from exc
         rows.append({
             "content": chunk,
-            "embedding": await embed_text(chunk),
+            embedding_column: vector,
             "source": filename,
             "original_name": original_name,
             "category": category,

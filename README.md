@@ -45,14 +45,18 @@ Render Free ใช้ Dockerfile เพื่อรันหน้าเว็�
 1. รัน `python stage_web.py` จากโฟลเดอร์หลังบ้านก่อนประกอบรุ่นที่จะเผยแพร่ แล้วตรวจไฟล์ที่สร้างใน `web/` ให้ตรงกับหน้าเว็บล่าสุด สร้าง commit ที่รวม `web/` และ `render.yaml` ใน branch สำหรับดีพลอย
 2. ใน Render เลือก **New → Blueprint** เชื่อม repo หลังบ้านและเลือก branch ที่เตรียมไว้ Blueprint กำหนด Docker, แผน Free, health check ที่ `/health` และสร้าง `SESSION_SECRET` ให้
 3. ตั้ง `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_USERNAME` และ `ADMIN_PASSWORD` ใน Render ตรวจชื่อ Storage bucket เดิมและแก้ `SUPABASE_BUCKET` ถ้าต่างจาก `pdfs`
-4. Blueprint ใช้ `AI_PROVIDER=vertex` สำหรับ Google Cloud ระบุ `GOOGLE_CLOUD_PROJECT`, เปิด API ของ Vertex AI และตั้ง Application Default Credentials ที่มีเฉพาะสิทธิ์เรียกโมเดล หากใช้ไฟล์ credentials กับ Render ให้เพิ่มเป็น **Secret File** ชื่อ `google-cloud.json` แล้วใช้พาธที่ Blueprint ตั้งไว้ เก็บ credentials และค่า Supabase ใน dashboard เท่านั้น
+4. Blueprint ใช้ `AI_PROVIDER=cloudflare` ตั้ง `CLOUDFLARE_ACCOUNT_ID` และ `CLOUDFLARE_API_TOKEN` ที่จำกัดสิทธิ์เฉพาะ Workers AI ใน Render Dashboard เลือก Workers Free ใน Cloudflare ใช้โควตาฟรีตามบัญชี และไม่ต้องผูก Google Cloud Billing
 5. เมื่อ deploy ผ่าน ให้เปิด URL จากอุปกรณ์อื่นและทดสอบตามรายการด้านล่าง บริการ Docker, Supabase และโมเดลรันบนคลาวด์หลังปิดเครื่องได้
 
 สำหรับโหมดทดสอบแบบจำกัดผู้ใช้ที่เข้าเงื่อนไข Gemini Developer API ให้ตั้ง `AI_PROVIDER=gemini` และ `GEMINI_API_KEYS` ในสภาพแวดล้อมนั้น ใช้ข้อมูลสังเคราะห์หรือเอกสารสาธารณะที่ตรวจแล้ว Gemini Developer API มีเงื่อนไขเรื่องกลุ่มผู้ใช้อายุต่ำกว่า 18 ปี จึงต้องใช้บริการ AI ภายใต้เงื่อนไขที่เทศบาลตรวจแล้วสำหรับการเปิดสาธารณะ
 
+ดัชนี Cloudflare ใช้เวกเตอร์ BGE-M3 1,024 มิติแยกจากดัชนีเดิม รัน `supabase/cloudflare_vectors.sql` ก่อน หลังตรวจว่าไฟล์เป็นเอกสารสาธารณะของเทศบาล ใช้ `python backfill_cloudflare_vectors.py --source "<รหัส source>"` เพื่อตรวจจำนวนรายการ และเติม `--apply` เฉพาะแหล่งที่ผ่านการตรวจแล้ว การถามตอบจะครอบคลุมเฉพาะเอกสารที่สร้างเวกเตอร์สำหรับผู้ให้บริการที่เลือก เอกสารที่อัปโหลดขณะใช้ Cloudflare จะต้องสร้างเวกเตอร์เดิมเพิ่มหากสลับกลับไป Gemini หรือ Vertex
+
+Workers Free ให้โควตา 10,000 Neurons ต่อวันร่วมกันทั้งบัญชี โทเค็นในหน้าเจ้าหน้าที่แสดงตามที่โมเดลรายงาน ส่วน Neurons ตรวจได้ใน Cloudflare Dashboard
+
 Render Free พักหลังไม่มีทราฟฟิก 15 นาทีและอาจใช้ประมาณหนึ่งนาทีเพื่อเริ่มใหม่ ใช้สำหรับทดสอบนำร่อง ถ้าต้องการให้บริการตอบได้สม่ำเสมอ ให้เลือกแผน always-on ตามภาระจริงและทดสอบ OCR ไฟล์ตัวอย่างก่อนเปิดรับงานขนาดใหญ่
 
-[Render Free](https://render.com/docs/free) · [Render Blueprint](https://render.com/docs/blueprint-spec) · [Gemini Developer API terms](https://aistudio.google.com/docs/terms#age-requirements) · [Google Cloud authentication](https://docs.cloud.google.com/gemini-enterprise-agent-platform/machine-learning/authentication)
+[Render Free](https://render.com/docs/free) · [Render Blueprint](https://render.com/docs/blueprint-spec) · [Workers AI REST API](https://developers.cloudflare.com/workers-ai/get-started/rest-api/) · [Workers AI Free allocation](https://developers.cloudflare.com/workers-ai/platform/pricing/)
 
 ### ตรวจหลังขึ้นคลาวด์
 
@@ -61,7 +65,7 @@ Render Free พักหลังไม่มีทราฟฟิก 15 นา�
 
 - รัน `.venv\Scripts\python.exe verify_deployment.py https://YOUR_SERVICE.onrender.com` เพื่อตรวจหน้าเว็บ, health, การจำกัดสิทธิ์หน้าเอกสาร และแชตที่ไม่บันทึกประวัติ เพิ่ม `--question "คำถามจากเอกสาร"` และ `--expected "ข้อความที่ยืนยันจากต้นฉบับ"` เพื่อทดสอบการค้นจริง
 - เปิด `/health` และหน้าแชตจากโทรศัพท์ที่อยู่นอกเครือข่ายเครื่องพัฒนา ตรวจ HTTPS และทดสอบอีกครั้งหลังปล่อยให้บริการพัก
-- ถามจากชุดคำถามที่เทศบาลมีคำตอบ ตรวจชื่อเอกสาร เลขหน้า ตัวเลขและวันที่ ทดสอบคำถามที่ไม่มีหลักฐานและการถามต่อโดยปิดประวัติ เทียบผลค้นจาก Vertex กับดัชนีเดิมก่อนนำ embedding ใหม่เข้าคลังจริง
+- ถามจากชุดคำถามที่เทศบาลมีคำตอบ ตรวจชื่อเอกสาร เลขหน้า ตัวเลขและวันที่ ทดสอบคำถามที่ไม่มีหลักฐาน การถามต่อโดยปิดประวัติ และการแสดงผลเมื่อโควตา Workers AI หมด
 - ตรวจว่า Supabase เปิด RLS สำหรับตารางที่เกี่ยวข้องและบัญชี anon อ่านประวัติหรือเอกสารภายในไม่ได้ ไฟล์ `supabase/enable_table_rls.sql` เปิด RLS ให้ตารางที่หลังบ้านเข้าผ่าน service-role ตรวจสิทธิ์ Storage bucket และทดสอบคืนฐานข้อมูลกับ PDF จากสำรองแยกกัน
 - ล็อกอินด้วยบัญชีทดสอบ อัปโหลด PDF สแกนที่กำหนดไว้ ตรวจว่าค้นเจอ เปิดเอกสารได้ และลบเฉพาะไฟล์ทดสอบ ตรวจสถิติข้ามเที่ยงคืนและทดสอบว่าแชตตอบได้ในขณะที่สถิติทำงาน
 - ยืนยันอายุข้อมูลที่เทศบาลต้องเก็บ ช่องทางขอลบ และนโยบายของผู้ให้บริการ AI ก่อนเปิดให้ประชาชนใช้

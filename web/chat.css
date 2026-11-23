@@ -99,7 +99,7 @@ a { color: var(--blue); text-underline-offset: .18em; }
 
 .request-feedback { display: flex; flex-wrap: wrap; flex: none; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 6px var(--gutter); color: var(--navy); background: var(--tint); }
 .request-feedback[data-state="idle"] { padding: 0; }
-.request-feedback[data-state="error"] { color: var(--danger); background: var(--danger-tint); }
+.request-feedback:is([data-state="error"], [data-state="quota"]) { color: var(--danger); background: var(--danger-tint); }
 .request-feedback p { margin: 0; font-size: .91rem; }
 .request-feedback[data-state="pending"] p::before { display: inline-block; content: ""; width: .72em; height: .72em; margin-inline-end: .5em; border: 2px solid var(--blue); border-inline-end-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

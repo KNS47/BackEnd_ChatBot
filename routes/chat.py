@@ -10,7 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Cookie, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
-from ai import AIUnavailable, embed_text, generate_answer
+from ai import AI_PROVIDER, AIQuotaExceeded, AIUnavailable, embed_text, generate_answer
 from config import COOKIE_SAMESITE, COOKIE_SECURE
 from database import supabase
 from middleware import limiter
@@ -88,7 +88,8 @@ def _history(session_id: str, limit: int) -> tuple[list, bool]:
 
 
 def _match(embedding: list[float]) -> list[dict]:
-    result = supabase.rpc("match_documents", {
+    match_rpc = "match_documents_cloudflare" if AI_PROVIDER == "cloudflare" else "match_documents"
+    result = supabase.rpc(match_rpc, {
         "query_embedding": embedding, "match_threshold": 0.6, "match_count": 8,
     }).execute()
     matches = []
@@ -225,6 +226,11 @@ async def _answer(question: str, history: list) -> tuple[str, str]:
             ), timeout=8)
             if len(rewritten) <= 300 and "\n" not in rewritten:
                 lookup = rewritten
+        except AIQuotaExceeded:
+            official = _official_answer(question)
+            if official is not None:
+                return official
+            raise
         except (AIUnavailable, asyncio.TimeoutError):
             logger.info("Question rewrite unavailable")
 
@@ -326,6 +332,14 @@ async def chat(request: Request, background_tasks: BackgroundTasks, session_id: 
             if expired or not history:
                 session_id = None
         answer, category = await _answer(question, history)
+    except AIQuotaExceeded:
+        return JSONResponse(
+            {
+                "code": "ai_daily_quota",
+                "error": "บริการ AI ใช้โควตาวันนี้ครบแล้วค่ะ ลองใหม่วันถัดไปหรือดูข้อมูลจากเว็บไซต์เทศบาล",
+            },
+            status_code=429,
+        )
     except Exception as exc:
         logger.warning("Chat request failed: %s", type(exc).__name__)
         if model_tokens[0]:
