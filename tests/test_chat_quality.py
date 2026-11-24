@@ -72,6 +72,54 @@ class ChatQualityTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("1250 บาท", answer)
 
+    async def test_repairs_missing_citation_once(self):
+        matches = [{"content": "ยื่นได้ที่กองช่าง", "category": "ก่อสร้าง"}]
+        for invalid in (
+            "invalid JSON",
+            '{"answer":"ยื่นที่กองช่าง","sources":[]}',
+            '{"answer":"ยื่นที่กองช่าง","sources":[99]}',
+        ):
+            with (
+                self.subTest(invalid=invalid),
+                patch.object(chat, "embed_text", AsyncMock(return_value=[0.2])),
+                patch.object(chat, "_match", return_value=matches),
+                patch.object(chat, "generate_answer", AsyncMock(side_effect=[
+                    invalid, '{"answer":"ยื่นที่กองช่าง","sources":[1]}',
+                ])) as generate,
+            ):
+                answer, category = await chat._answer("ขออนุญาตก่อสร้างอาคารที่ไหน", [])
+                self.assertIn("ยื่นที่กองช่าง", answer)
+                self.assertEqual(category, "ก่อสร้าง")
+                self.assertEqual(generate.await_count, 2)
+                self.assertEqual(generate.await_args_list[0].args, generate.await_args_list[1].args)
+
+    async def test_repair_cannot_bypass_numeric_guard(self):
+        with (
+            patch.object(chat, "embed_text", AsyncMock(return_value=[0.2])),
+            patch.object(chat, "_match", return_value=[{"content": "ค่าธรรมเนียม 30 บาท"}]),
+            patch.object(chat, "_official_answer", return_value=None),
+            patch.object(chat, "generate_answer", AsyncMock(side_effect=[
+                '{"answer":"ค่าธรรมเนียม 500 บาท","sources":[]}',
+                '{"answer":"ค่าธรรมเนียม 500 บาท","sources":[1]}',
+            ])) as generate,
+        ):
+            answer, _ = await chat._answer("ค่าธรรมเนียมกำจัดขยะเท่าไหร่", [])
+        self.assertEqual(answer, chat.NO_MATCH)
+        self.assertEqual(generate.await_count, 2)
+
+    async def test_abstention_keeps_official_fallback_without_retry(self):
+        with (
+            patch.object(chat, "embed_text", AsyncMock(return_value=[0.2])),
+            patch.object(chat, "_match", return_value=[{"content": "ข้อมูลไม่ตรงคำถาม"}]),
+            patch.object(chat, "_official_answer", return_value=("verified", "category")),
+            patch.object(chat, "generate_answer", AsyncMock(
+                return_value='{"answer":"","sources":[]}',
+            )) as generate,
+        ):
+            result = await chat._answer("ถามข้อมูลเทศบาล", [])
+        self.assertEqual(result, ("verified", "category"))
+        generate.assert_awaited_once()
+
     async def test_recent_context_resolves_followup(self):
         history = [{"role": "user", "content": "ขออนุญาตก่อสร้างอาคารที่ไหน"}]
         answer_json = '{"answer":"ยื่นที่กองช่าง","sources":[1]}'

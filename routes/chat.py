@@ -161,24 +161,33 @@ def _source_url(row: dict) -> str | None:
     return None
 
 
-async def _validated_answer(raw: str, matches: list[dict]) -> tuple[str, str]:
+def _answer_fields(raw: str, source_count: int) -> tuple[str, list[int]] | None:
+    """Return None for a malformed response, or an empty pair for abstention."""
     try:
         result = json.loads(raw)
     except json.JSONDecodeError:
-        return NO_MATCH, "อื่น ๆ"
+        return None
     if not isinstance(result, dict):
-        return NO_MATCH, "อื่น ๆ"
+        return None
     answer, ids = result.get("answer"), result.get("sources")
     if not isinstance(answer, str) or not isinstance(ids, list):
-        return NO_MATCH, "อื่น ๆ"
+        return None
+    if not answer.strip() and not ids:
+        return "", []
     chosen = list(dict.fromkeys(
-        item for item in ids if type(item) is int and 1 <= item <= len(matches)
+        item for item in ids if type(item) is int and 1 <= item <= source_count
     ))[:4]
     # Keep links under server control. The frontend sanitizes all displayed content.
     answer = re.sub(r"\[([^\]\n]+)\]\([^)\n]*\)", r"\1", answer)
     answer = URL_PATTERN.sub("", answer).strip()
-    if not answer or not chosen:
+    return (answer, chosen) if answer and chosen else None
+
+
+async def _validated_answer(raw: str, matches: list[dict]) -> tuple[str, str]:
+    fields = _answer_fields(raw, len(matches))
+    if not fields or not fields[0]:
         return NO_MATCH, "อื่น ๆ"
+    answer, chosen = fields
     rows = [matches[index - 1] for index in chosen]
     # Citation IDs alone cannot corroborate amounts, times or dates. Require
     # the same numeric values in at least one selected excerpt.
@@ -215,6 +224,31 @@ def _official_answer(question: str) -> tuple[str, str] | None:
     if url not in answer:
         answer += f"\n\n[ข้อมูลจากเทศบาลเมืองศิลา]({url})"
     return answer, "ร้องเรียน" if url == COMPLAINT_URL else "บริการเทศบาล"
+
+
+async def _generate_with_sources(prompt: str, source_count: int) -> str:
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + 14
+    result = await asyncio.wait_for(generate_answer(
+        prompt, instructions=ANSWER_INSTRUCTIONS, response_schema=ANSWER_SCHEMA,
+    ), timeout=14)
+    if _answer_fields(result, source_count) is not None:
+        return result
+
+    remaining = deadline - loop.time()
+    if remaining <= 0:
+        return result
+    try:
+        return await asyncio.wait_for(generate_answer(
+            prompt,
+            instructions=(
+                f"{ANSWER_INSTRUCTIONS}\nคืน JSON ที่มี answer และ sources เท่านั้น "
+                "ทุกคำตอบที่ไม่ว่างต้องมีเลข id ของเอกสารอ้างอิงจริงอย่างน้อยหนึ่งรายการ"
+            ),
+            response_schema=ANSWER_SCHEMA,
+        ), timeout=min(4, remaining))
+    except (AIUnavailable, asyncio.TimeoutError):
+        return result
 
 
 async def _answer(question: str, history: list) -> tuple[str, str]:
@@ -270,9 +304,7 @@ async def _answer(question: str, history: list) -> tuple[str, str]:
         ],
     }, ensure_ascii=False)
     try:
-        raw = await asyncio.wait_for(generate_answer(
-            prompt, instructions=ANSWER_INSTRUCTIONS, response_schema=ANSWER_SCHEMA,
-        ), timeout=14)
+        raw = await _generate_with_sources(prompt, len(matches))
     except (AIUnavailable, asyncio.TimeoutError):
         official = _official_answer(question)
         if official is not None:

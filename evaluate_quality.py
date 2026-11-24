@@ -7,6 +7,7 @@ import os
 import statistics
 import unicodedata
 from collections import Counter
+from contextlib import nullcontext
 from math import sqrt
 from pathlib import Path
 from time import perf_counter
@@ -49,7 +50,7 @@ def checks(doc, response, wanted, excluded=(), *, message="จุดบริก
     return doc, response, wanted, excluded, message, status, recent
 
 
-async def evaluate_chat(repeats, chat):
+def chat_cases(chat):
     missing = ("ยังไม่พบข้อมูลที่ยืนยัน",)
     cases = {
         "official-contact": checks((), (), ("043-246505", "sila-kk.go.th/contactus.php"), message=CONTACT),
@@ -76,10 +77,6 @@ async def evaluate_chat(repeats, chat):
             message="จุดบริการสมมุติเก็บค่าธรรมเนียมเท่าไร",
         ),
     }
-    app = FastAPI()
-    app.state.limiter = chat.limiter
-    app.include_router(chat.router)
-    rows = []
     # Gold labels describe evidence availability, independent of whether a
     # malformed model response is safely refused. Outages are excluded.
     truth = {
@@ -93,6 +90,37 @@ async def evaluate_chat(repeats, chat):
         "bad-model-json": True,
         "unsupported-fee-valid-id": False,
     }
+    return cases, truth
+
+
+def repair_cases():
+    missing = ("ยังไม่พบข้อมูลที่ยืนยัน",)
+    grounded = ("08:45", "คู่มือทดสอบ.pdf (หน้า 3)")
+    corrected = '{"answer":"เปิดเวลา 08:45 น.","sources":[1]}'
+    invalid_responses = {
+        "malformed-json": "invalid model response",
+        "missing-citation": '{"answer":"เปิดเวลา 08:45 น.","sources":[]}',
+        "unknown-citation": '{"answer":"เปิดเวลา 08:45 น.","sources":[98]}',
+    }
+    cases = {}
+    truth = {}
+    for name, invalid in invalid_responses.items():
+        cases[f"recoverable-{name}"] = checks([DOC], [invalid, corrected], grounded)
+        cases[f"persistent-{name}"] = checks([DOC], [invalid, invalid], missing, ("08:45",))
+        truth[f"recoverable-{name}"] = truth[f"persistent-{name}"] = True
+    cases["no-evidence-fee"] = checks(
+        [DOC], ['{"answer":"ค่าธรรมเนียม 500 บาท","sources":[1]}'], missing, ("500",),
+        message="จุดบริการสมมุติเก็บค่าธรรมเนียมเท่าไร",
+    )
+    truth["no-evidence-fee"] = False
+    return cases, truth
+
+
+async def evaluate_chat(repeats, chat, cases, truth):
+    app = FastAPI()
+    app.state.limiter = chat.limiter
+    app.include_router(chat.router)
+    rows = []
     confusion = Counter()
     # Isolate repeated requests from the production rate limiter counter.
     async with httpx.AsyncClient(
@@ -101,10 +129,14 @@ async def evaluate_chat(repeats, chat):
         for name, (docs, replies, needed, excluded, message, status, recent) in cases.items():
             elapsed = []
             passed = 0
+            call_counts = []
             for _ in range(repeats):
                 rpc = Mock()
                 rpc.execute.return_value = SimpleNamespace(data=[dict(row) for row in docs])
-                generator = AsyncMock(side_effect=list(replies))
+                # If a repair retry is attempted beyond the declared responses,
+                # repeat the final fixture response as a persistent condition.
+                responses = (*replies, replies[-1]) if replies else ()
+                generator = AsyncMock(side_effect=responses)
                 with (
                     patch.object(chat, "embed_text", AsyncMock(return_value=[0.5])) as embed,
                     patch.object(chat, "generate_answer", generator),
@@ -132,9 +164,33 @@ async def evaluate_chat(repeats, chat):
                     if name == "follow-up":
                         correct = correct and embed.called and embed.call_args.args == ("จุดบริการสมมุติเปิดกี่โมง",)
                     passed += bool(correct)
+                    call_counts.append(generator.await_count)
                     chat.limiter.reset()
-            rows.append({"case": name, "passed": passed, "trials": repeats, "median_ms": round(statistics.median(elapsed), 2)})
+            rows.append({
+                "case": name, "passed": passed, "trials": repeats,
+                "generation_calls_per_trial": call_counts,
+                "median_ms": round(statistics.median(elapsed), 2),
+            })
     return rows, classification_metrics(confusion)
+
+
+async def evaluate_repair(repeats, chat):
+    cases, truth = repair_cases()
+
+    async def generate_once(prompt, _source_count):
+        return await chat.generate_answer(
+            prompt, instructions=chat.ANSWER_INSTRUCTIONS, response_schema=chat.ANSWER_SCHEMA,
+        )
+
+    repair_available = hasattr(chat, "_generate_with_sources")
+    baseline = patch.object(chat, "_generate_with_sources", generate_once) if repair_available else nullcontext()
+    with baseline:
+        before, baseline_metrics = await evaluate_chat(repeats, chat, cases, truth)
+    result = {"generation_once": {"cases": before, "answerability": baseline_metrics}}
+    if repair_available:
+        after, repair_metrics = await evaluate_chat(repeats, chat, cases, truth)
+        result["bounded_repair"] = {"cases": after, "answerability": repair_metrics}
+    return result
 
 
 def classification_metrics(confusion):
@@ -265,20 +321,23 @@ def evaluate_pdf(font, repeats, extract_pages, tokenize):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--thai-font", type=Path, required=True, help="Font file with Thai glyphs")
-    parser.add_argument("--tessdata", type=Path, required=True, help="Directory containing tha/eng.traineddata")
+    parser.add_argument("--thai-font", type=Path, help="Font file with Thai glyphs")
+    parser.add_argument("--tessdata", type=Path, help="Directory containing tha/eng.traineddata")
+    parser.add_argument("--chat-only", action="store_true", help="Skip PDF and OCR evaluation")
     parser.add_argument("--trials", type=int, default=3)
     args = parser.parse_args()
     if not 1 <= args.trials <= 20:
         parser.error("--trials must be between 1 and 20")
-    if not args.thai_font.is_file():
-        parser.error("--thai-font must point to a readable font")
-    if not all((args.tessdata / f"{lang}.traineddata").is_file() for lang in ("tha", "eng")):
-        parser.error("--tessdata must contain tha.traineddata and eng.traineddata")
-    try:
-        from pythainlp.tokenize import word_tokenize
-    except ImportError:
-        parser.error("Install evaluation dependencies from requirements-evaluation.txt")
+    if not args.chat_only:
+        if not args.thai_font or not args.thai_font.is_file():
+            parser.error("--thai-font must point to a readable font")
+        if not args.tessdata or not all((args.tessdata / f"{lang}.traineddata").is_file() for lang in ("tha", "eng")):
+            parser.error("--tessdata must contain tha.traineddata and eng.traineddata")
+        try:
+            from pythainlp.tokenize import word_tokenize
+        except ImportError:
+            parser.error("Install evaluation dependencies from requirements-evaluation.txt")
+        os.environ["TESSDATA_PREFIX"] = str(args.tessdata.resolve())
 
     # This evaluator replaces every hosted call with a fixture. Use only synthetic credentials.
     os.environ.update({
@@ -287,21 +346,22 @@ def main():
         "SUPABASE_URL": "https://example.invalid",
         "SUPABASE_SERVICE_ROLE_KEY": "evaluation-placeholder",
         "SESSION_SECRET": "evaluation-placeholder",
-        "TESSDATA_PREFIX": str(args.tessdata.resolve()),
     })
     from routes import chat
-    from pdf_service import extract_pages
-
-    answers, answerability = asyncio.run(evaluate_chat(args.trials, chat))
-    ocr = evaluate_pdf(
-        args.thai_font, args.trials, extract_pages, lambda text: word_tokenize(text, engine="newmm", keep_whitespace=False),
-    )
-    print(json.dumps({
+    answers, answerability = asyncio.run(evaluate_chat(args.trials, chat, *chat_cases(chat)))
+    output = {
         "chat_mocked": answers,
         "answerability_mocked": answerability,
         "retrieval_offline_baseline": evaluate_retrieval(),
-        "pdf_ocr_local": ocr,
-    }, ensure_ascii=False, indent=2))
+        "repair_comparison_mocked": asyncio.run(evaluate_repair(args.trials, chat)),
+    }
+    if not args.chat_only:
+        from pdf_service import extract_pages
+
+        output["pdf_ocr_local"] = evaluate_pdf(
+            args.thai_font, args.trials, extract_pages, lambda text: word_tokenize(text, engine="newmm", keep_whitespace=False),
+        )
+    print(json.dumps(output, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
