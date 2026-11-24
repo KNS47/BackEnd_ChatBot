@@ -44,6 +44,19 @@ RETRIEVAL_LABELS = (
     ("ติดต่อรถขนมูลฝอยอย่างไร", {"waste"}),
     ("เบอร์โทรเทศบาลคืออะไร", {"contact"}),
 )
+OFFICIAL_PAGES = {
+    "contact": "การติดต่อเทศบาลเมืองศิลา โทรศัพท์ 043-246505 ที่อยู่ 722 หมู่ 14 ตำบลศิลา อำเภอเมืองขอนแก่น",
+    "complaint": "ช่องทางร้องเรียน ร้องทุกข์ของเทศบาลเมืองศิลา",
+    "forms": "ดาวน์โหลดแบบฟอร์มต่าง ๆ ของเทศบาลเมืองศิลา",
+    "news": "ข่าวประชาสัมพันธ์เทศบาลเมืองศิลา",
+}
+OFFICIAL_LABELS = (
+    ("โทรหาเทศบาลเมืองศิลาที่เบอร์ไหน", {"contact"}),
+    ("สำนักงานเทศบาลอยู่ที่ไหน", {"contact"}),
+    ("ยื่นเรื่องร้องทุกข์ผ่านช่องทางไหน", {"complaint"}),
+    ("แบบฟอร์มเทศบาลดาวน์โหลดจากที่ไหน", {"forms"}),
+    ("ติดตามข่าวประชาสัมพันธ์จากไหน", {"news"}),
+)
 
 
 def checks(doc, response, wanted, excluded=(), *, message="จุดบริการสมมุติเปิดกี่โมง", status=200, recent=()):
@@ -193,6 +206,45 @@ async def evaluate_repair(repeats, chat):
     return result
 
 
+def numeric_context_cases():
+    cases = {}
+    truth = {}
+    fixture = (
+        ("days-not-baht", "ระยะเวลาดำเนินการ 5 วัน", "ค่าธรรมเนียม 5 บาท", False),
+        ("calendar-not-working-days", "ยื่นภายใน 5 วัน", "ต้องยื่นภายใน 5 วันทำการ", False),
+        ("thai-digits-fee", "ค่าธรรมเนียม ๑,๒๕๐ บาท", "ชำระ 1250 บาท", True),
+        ("hour-abbreviation", "ระยะเวลา 1 ชม.", "ใช้เวลา 1 ชั่วโมง", True),
+        ("same-unit-unrelated-service", "ค่าธรรมเนียมบริการ ก 100 บาท เงินมัดจำบริการ ก 500 บาท", "ค่าธรรมเนียมบริการ ข 500 บาท", False),
+    )
+    for name, evidence, answer, supported in fixture:
+        docs = [{**DOC, "content": evidence}]
+        response = json.dumps({"answer": answer, "sources": [1]}, ensure_ascii=False)
+        wanted = (answer, "คู่มือทดสอบ.pdf (หน้า 3)") if supported else ("ยังไม่พบข้อมูลที่ยืนยัน",)
+        blocked = () if supported else (answer,)
+        cases[name] = checks(docs, [response], wanted, blocked, message=f"ข้อมูลนี้มีในเอกสารหรือไม่ {answer}")
+        truth[name] = supported
+    return cases, truth
+
+
+async def evaluate_numeric_context(repeats, chat):
+    cases, truth = numeric_context_cases()
+
+    def check_numbers_only(answer, rows):
+        answer_numbers = chat.numeric_values(chat.LIST_NUMBER.sub("", answer.translate(chat.THAI_DIGITS)))
+        evidence_numbers = set().union(*(chat.numeric_values(row["content"]) for row in rows))
+        return answer_numbers <= evidence_numbers
+
+    context_available = hasattr(chat, "_numeric_claims_supported")
+    baseline = patch.object(chat, "_numeric_claims_supported", check_numbers_only) if context_available else nullcontext()
+    with baseline:
+        before, metrics_before = await evaluate_chat(repeats, chat, cases, truth)
+    result = {"number_only": {"cases": before, "claim_verification": metrics_before}}
+    if context_available:
+        after, metrics_after = await evaluate_chat(repeats, chat, cases, truth)
+        result["number_and_unit"] = {"cases": after, "claim_verification": metrics_after}
+    return result
+
+
 def classification_metrics(confusion):
     tp, tn = confusion[True, True], confusion[False, False]
     fp, fn = confusion[False, True], confusion[True, False]
@@ -220,11 +272,11 @@ def similarity(left, right):
     return overlap / norm if norm else 0.0
 
 
-def evaluate_retrieval():
-    indexed = {doc_id: trigram_counts(text) for doc_id, text in RETRIEVAL_DOCS.items()}
+def evaluate_retrieval(documents=RETRIEVAL_DOCS, labels=RETRIEVAL_LABELS):
+    indexed = {doc_id: trigram_counts(text) for doc_id, text in documents.items()}
     cutoffs = (1, 3, 5)
     rows = []
-    for question, relevant in RETRIEVAL_LABELS:
+    for question, relevant in labels:
         query = trigram_counts(question)
         ranked = sorted(indexed, key=lambda doc_id: (-similarity(query, indexed[doc_id]), doc_id))
         row = {
@@ -353,7 +405,9 @@ def main():
         "chat_mocked": answers,
         "answerability_mocked": answerability,
         "retrieval_offline_baseline": evaluate_retrieval(),
+        "retrieval_offline_official_pages": evaluate_retrieval(OFFICIAL_PAGES, OFFICIAL_LABELS),
         "repair_comparison_mocked": asyncio.run(evaluate_repair(args.trials, chat)),
+        "numeric_context_comparison_mocked": asyncio.run(evaluate_numeric_context(args.trials, chat)),
     }
     if not args.chat_only:
         from pdf_service import extract_pages

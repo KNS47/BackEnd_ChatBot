@@ -72,6 +72,32 @@ class ChatQualityTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("1250 บาท", answer)
 
+    async def test_numeric_value_with_incompatible_unit_is_rejected(self):
+        for evidence, claim in (
+            ("ยื่นเอกสารภายใน 5 วัน", "ค่าธรรมเนียม 5 บาท"),
+            ("มีค่าธรรมเนียม 10 บาท", "ส่วนลดร้อยละ 10"),
+            ("ดำเนินการภายใน 7 วัน", "ดำเนินการภายใน 7 วันทำการ"),
+        ):
+            with self.subTest(claim=claim), patch.object(chat, "_add_metadata") as enrich:
+                answer, _ = await chat._validated_answer(
+                    json.dumps({"answer": claim, "sources": [1]}), [{"content": evidence}],
+                )
+                self.assertEqual(answer, chat.NO_MATCH)
+                enrich.assert_not_called()
+
+    async def test_equivalent_numeric_unit_spellings_are_accepted(self):
+        for evidence, claim in (
+            ("ดำเนินการภายใน ๑ ชม.", "ใช้เวลา **1** ชั่วโมง"),
+            ("มีค่าธรรมเนียม ฿ 50", "ค่าธรรมเนียม 50 บาท"),
+            ("มีส่วนลดร้อยละ 10", "ส่วนลด 10%"),
+            ("ยื่นเอกสารภายใน ๕ วัน ทำการ", "ยื่นได้ภายใน 5 วันทำการ"),
+        ):
+            with self.subTest(claim=claim):
+                answer, _ = await chat._validated_answer(
+                    json.dumps({"answer": claim, "sources": [1]}), [{"content": evidence}],
+                )
+                self.assertIn(claim, answer)
+
     async def test_repairs_missing_citation_once(self):
         matches = [{"content": "ยื่นได้ที่กองช่าง", "category": "ก่อสร้าง"}]
         for invalid in (
