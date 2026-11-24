@@ -6,6 +6,8 @@ import json
 import os
 import statistics
 import unicodedata
+from collections import Counter
+from math import sqrt
 from pathlib import Path
 from time import perf_counter
 from types import SimpleNamespace
@@ -23,6 +25,24 @@ DOC = {
     "page_number": 3,
 }
 CONTACT = "ติดต่อเทศบาลเมืองศิลาได้ทางไหนบ้าง"
+RETRIEVAL_DOCS = {
+    "building": "ขออนุญาตก่อสร้างอาคาร ใช้แบบคำขอก่อสร้างและสำเนาโฉนด",
+    "tax": "ชำระภาษีที่ดินและสิ่งปลูกสร้าง ติดต่อกองคลัง",
+    "complaint": "ร้องเรียนและร้องทุกข์ผ่านเว็บไซต์เทศบาล",
+    "elderly": "ลงทะเบียนเบี้ยยังชีพผู้สูงอายุ ติดต่อกองสวัสดิการสังคม",
+    "waste": "ติดต่อเจ้าหน้าที่เก็บขยะตามวันและรอบของชุมชน",
+    "contact": "ติดต่อสำนักงานเทศบาล โทรศัพท์ 043-246505",
+    "permit": "ขอใบอนุญาตประกอบกิจการค้า ติดต่อกองสาธารณสุข",
+    "feedback": "สอบถามและแจ้งปัญหาบริการประชาชนผ่านช่องทางร้องเรียน",
+}
+RETRIEVAL_LABELS = (
+    ("ขออนุญาตก่อสร้างอาคารใช้เอกสารอะไร", {"building"}),
+    ("อยากชำระภาษีที่ดินต้องไปที่ไหน", {"tax"}),
+    ("แจ้งเรื่องร้องเรียนผ่านช่องทางไหน", {"complaint", "feedback"}),
+    ("สมัครเบี้ยยังชีพผู้สูงอายุที่ไหน", {"elderly"}),
+    ("ติดต่อรถขนมูลฝอยอย่างไร", {"waste"}),
+    ("เบอร์โทรเทศบาลคืออะไร", {"contact"}),
+)
 
 
 def checks(doc, response, wanted, excluded=(), *, message="จุดบริการสมมุติเปิดกี่โมง", status=200, recent=()):
@@ -60,6 +80,20 @@ async def evaluate_chat(repeats, chat):
     app.state.limiter = chat.limiter
     app.include_router(chat.router)
     rows = []
+    # Gold labels describe evidence availability, independent of whether a
+    # malformed model response is safely refused. Outages are excluded.
+    truth = {
+        "official-contact": True,
+        "grounded-answer": True,
+        "no-search-match": False,
+        "missing-citation": True,
+        "unknown-citation": True,
+        "untrusted-output-url": True,
+        "follow-up": True,
+        "bad-model-json": True,
+        "unsupported-fee-valid-id": False,
+    }
+    confusion = Counter()
     # Isolate repeated requests from the production rate limiter counter.
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://evaluation.local",
@@ -85,6 +119,9 @@ async def evaluate_chat(repeats, chat):
                     elapsed.append((perf_counter() - started) * 1000)
                     body = response.json()
                     answer = body.get("answer", body.get("error", ""))
+                    if name in truth:
+                        predicted = response.status_code == 200 and bool(answer) and answer != chat.NO_MATCH
+                        confusion[(truth[name], predicted)] += 1
                     correct = (
                         response.status_code == status
                         and all(item in answer for item in needed)
@@ -97,15 +134,67 @@ async def evaluate_chat(repeats, chat):
                     passed += bool(correct)
                     chat.limiter.reset()
             rows.append({"case": name, "passed": passed, "trials": repeats, "median_ms": round(statistics.median(elapsed), 2)})
-    return rows
+    return rows, classification_metrics(confusion)
+
+
+def classification_metrics(confusion):
+    tp, tn = confusion[True, True], confusion[False, False]
+    fp, fn = confusion[False, True], confusion[True, False]
+
+    def ratio(numerator, denominator):
+        return round(numerator / denominator, 4) if denominator else None
+
+    return {
+        "tp": tp, "tn": tn, "fp": fp, "fn": fn,
+        "accuracy": ratio(tp + tn, tp + tn + fp + fn),
+        "precision": ratio(tp, tp + fp),
+        "recall": ratio(tp, tp + fn),
+        "f1": ratio(2 * tp, 2 * tp + fp + fn),
+    }
+
+
+def trigram_counts(text):
+    text = normalized(text).casefold()
+    return Counter(text[position:position + 3] for position in range(len(text) - 2))
+
+
+def similarity(left, right):
+    overlap = sum(count * right[token] for token, count in left.items())
+    norm = sqrt(sum(count**2 for count in left.values()) * sum(count**2 for count in right.values()))
+    return overlap / norm if norm else 0.0
+
+
+def evaluate_retrieval():
+    indexed = {doc_id: trigram_counts(text) for doc_id, text in RETRIEVAL_DOCS.items()}
+    cutoffs = (1, 3, 5)
+    rows = []
+    for question, relevant in RETRIEVAL_LABELS:
+        query = trigram_counts(question)
+        ranked = sorted(indexed, key=lambda doc_id: (-similarity(query, indexed[doc_id]), doc_id))
+        row = {
+            "question": question,
+            "relevant": sorted(relevant),
+            "ranking": ranked,
+            "reciprocal_rank": next(1 / rank for rank, doc_id in enumerate(ranked, 1) if doc_id in relevant),
+        }
+        for k in cutoffs:
+            row[f"recall_at_{k}"] = len(relevant.intersection(ranked[:k])) / len(relevant)
+        rows.append(row)
+    return {
+        "method": "offline character trigram cosine",
+        "labeled_queries": len(rows),
+        "corpus_size": len(indexed),
+        "mrr": round(statistics.mean(row["reciprocal_rank"] for row in rows), 4),
+        **{f"recall_at_{k}": round(statistics.mean(row[f"recall_at_{k}"] for row in rows), 4) for k in cutoffs},
+        "per_query": rows,
+    }
 
 
 def normalized(text):
     return "".join(unicodedata.normalize("NFC", text).split())
 
 
-def character_error_rate(expected, actual):
-    expected, actual = normalized(expected), normalized(actual)
+def error_rate(expected, actual):
     previous = list(range(len(actual) + 1))
     for row, expected_char in enumerate(expected, 1):
         current = [row]
@@ -116,6 +205,10 @@ def character_error_rate(expected, actual):
             ))
         previous = current
     return previous[-1] / len(expected)
+
+
+def word_tokens(text, tokenize):
+    return [token for token in tokenize(unicodedata.normalize("NFC", text)) if any(char.isalnum() for char in token)]
 
 
 def pdf_fixture(font_path, *, raster_dpi=None, rotation=0):
@@ -141,14 +234,14 @@ def pdf_fixture(font_path, *, raster_dpi=None, rotation=0):
         return fixture.tobytes(), [english, thai]
 
 
-def evaluate_pdf(font, repeats, extract_pages):
+def evaluate_pdf(font, repeats, extract_pages, tokenize):
     output = []
     for label, dpi, rotation in (
         ("native PDF", None, 0), ("mixed 300 dpi", 300, 0),
         ("mixed 120 dpi", 120, 0), ("rotated Thai scan 300 dpi", 300, 90),
     ):
         fixture, expected = pdf_fixture(font, raster_dpi=dpi, rotation=rotation)
-        elapsed, rates = [], []
+        elapsed, cer, wer = [], [], []
         ordered = 0
         for _ in range(repeats):
             started = perf_counter()
@@ -156,12 +249,16 @@ def evaluate_pdf(font, repeats, extract_pages):
             elapsed.append((perf_counter() - started) * 1000)
             ordered += int([page for page, _ in pages] == [1, 2])
             recognized = dict(pages)
-            rates.append([character_error_rate(truth, recognized.get(number, "")) for number, truth in enumerate(expected, 1)])
+            pairs = [(truth, recognized.get(number, "")) for number, truth in enumerate(expected, 1)]
+            cer.append([error_rate(normalized(truth), normalized(actual)) for truth, actual in pairs])
+            wer.append([error_rate(word_tokens(truth, tokenize), word_tokens(actual, tokenize)) for truth, actual in pairs])
         output.append({
             "fixture": label, "pages_per_trial": len(expected), "trials": repeats, "page_order_passed": ordered,
             "median_ms": round(statistics.median(elapsed), 2),
-            "english_cer": round(statistics.mean(pair[0] for pair in rates), 4),
-            "thai_cer": round(statistics.mean(pair[1] for pair in rates), 4),
+            "english_cer": round(statistics.mean(pair[0] for pair in cer), 4),
+            "thai_cer": round(statistics.mean(pair[1] for pair in cer), 4),
+            "english_wer": round(statistics.mean(pair[0] for pair in wer), 4),
+            "thai_wer": round(statistics.mean(pair[1] for pair in wer), 4),
         })
     return output
 
@@ -178,6 +275,10 @@ def main():
         parser.error("--thai-font must point to a readable font")
     if not all((args.tessdata / f"{lang}.traineddata").is_file() for lang in ("tha", "eng")):
         parser.error("--tessdata must contain tha.traineddata and eng.traineddata")
+    try:
+        from pythainlp.tokenize import word_tokenize
+    except ImportError:
+        parser.error("Install evaluation dependencies from requirements-evaluation.txt")
 
     # This evaluator replaces every hosted call with a fixture. Use only synthetic credentials.
     os.environ.update({
@@ -191,9 +292,16 @@ def main():
     from routes import chat
     from pdf_service import extract_pages
 
-    answers = asyncio.run(evaluate_chat(args.trials, chat))
-    ocr = evaluate_pdf(args.thai_font, args.trials, extract_pages)
-    print(json.dumps({"chat_mocked": answers, "pdf_ocr_local": ocr}, ensure_ascii=False, indent=2))
+    answers, answerability = asyncio.run(evaluate_chat(args.trials, chat))
+    ocr = evaluate_pdf(
+        args.thai_font, args.trials, extract_pages, lambda text: word_tokenize(text, engine="newmm", keep_whitespace=False),
+    )
+    print(json.dumps({
+        "chat_mocked": answers,
+        "answerability_mocked": answerability,
+        "retrieval_offline_baseline": evaluate_retrieval(),
+        "pdf_ocr_local": ocr,
+    }, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
