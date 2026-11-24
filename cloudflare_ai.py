@@ -148,10 +148,6 @@ class CloudflareTransport:
             fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", answer, flags=re.IGNORECASE | re.DOTALL)
             if fenced:
                 answer = fenced.group(1)
-            try:
-                parsed = json.loads(answer)
-            except ValueError:
-                raise CloudflareUnavailable("Workers AI returned invalid JSON") from None
-            if not isinstance(parsed, dict):
-                raise CloudflareUnavailable("Workers AI returned a non-object structured answer")
+            # A completed answer with invalid JSON is recoverable by the caller's
+            # bounded structured-output retry. Transport failures still raise.
         return answer

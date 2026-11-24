@@ -11,6 +11,7 @@ os.environ.setdefault("SESSION_SECRET", "test-placeholder")
 
 import ai
 from cloudflare_ai import CloudflareTransport, DEFAULT_GENERATION_MODEL, EMBEDDING_DIMENSIONS
+from routes import chat
 from usage_counter import generation_usage
 
 ACCOUNT_ID = "1234567890abcdef1234567890abcdef"
@@ -22,6 +23,43 @@ SCHEMA = {
 
 
 class CloudflareTransportTests(unittest.IsolatedAsyncioTestCase):
+    async def test_invalid_structured_answer_uses_chat_repair(self):
+        for malformed in ('{"answer":', '["not an object"]'):
+            requests = []
+
+            def handle(request):
+                requests.append(request)
+                answer = malformed if len(requests) == 1 else '{"answer":"verified","sources":[1]}'
+                return httpx.Response(200, json={
+                    "choices": [{"message": {"content": answer}, "finish_reason": "stop"}],
+                })
+
+            with self.subTest(malformed=malformed):
+                async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+                    with (
+                        patch.object(ai, "_cloudflare", CloudflareTransport(ACCOUNT_ID, "fixture")),
+                        patch.object(ai, "_client", client),
+                    ):
+                        result = await chat._generate_with_sources("evidence and question", 1)
+                self.assertEqual(json.loads(result), {"answer": "verified", "sources": [1]})
+                self.assertEqual(len(requests), 2)
+
+    async def test_connection_error_does_not_trigger_structured_retry(self):
+        requests = []
+
+        def handle(request):
+            requests.append(request)
+            raise httpx.ConnectError("test connection failure", request=request)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+            with (
+                patch.object(ai, "_cloudflare", CloudflareTransport(ACCOUNT_ID, "fixture")),
+                patch.object(ai, "_client", client),
+            ):
+                with self.assertRaises(ai.AIUnavailable):
+                    await chat._generate_with_sources("evidence and question", 1)
+        self.assertEqual(len(requests), 1)
+
     async def test_generation_maps_schema_and_reports_provider_usage(self):
         def handle(request):
             self.assertEqual(request.url.path, f"/client/v4/accounts/{ACCOUNT_ID}/ai/v1/chat/completions")
