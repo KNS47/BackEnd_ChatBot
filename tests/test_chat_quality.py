@@ -158,6 +158,50 @@ class ChatQualityTests(unittest.IsolatedAsyncioTestCase):
         embed.assert_awaited_once_with("การขออนุญาตก่อสร้างใช้เอกสารอะไร")
         self.assertIn("กองช่าง", answer)
 
+    async def test_failed_rewrite_searches_latest_user_topic_for_followup(self):
+        latest_topic = "ขออนุญาตรื้อถอนอาคารต้องยื่นที่ไหน"
+        followup = "ต้องใช้เอกสารอะไรอีก"
+        history = [
+            {"role": "user", "content": "ขึ้นทะเบียนพาณิชย์ที่ไหน"},
+            {"role": "user", "content": latest_topic},
+            {"role": "assistant", "content": "ไปกองช่าง"},
+            {"role": "user", "content": "แล้วใช้เวลากี่วัน"},
+            {"role": "assistant", "content": "ภายใน 5 วัน"},
+        ]
+        for bad_rewrite in ("   ", "ข้อความ\rคำถาม", followup, ai.AIUnavailable("unavailable")):
+            with (
+                self.subTest(rewrite=bad_rewrite),
+                patch.object(chat, "generate_answer", AsyncMock(side_effect=[
+                    bad_rewrite, '{"answer":"ยื่นแบบคำขอ","sources":[1]}',
+                ])) as generate,
+                patch.object(chat, "embed_text", AsyncMock(return_value=[0.2])) as embed,
+                patch.object(chat, "_match", return_value=[{"content": "ให้ยื่นแบบคำขอ"}]),
+            ):
+                answer, _ = await chat._answer(followup, history)
+                embed.assert_awaited_once_with(f"{latest_topic}\n{followup}")
+                prompt = json.loads(generate.await_args.args[0])
+                self.assertEqual(prompt["question"], followup)
+                self.assertIn("ยื่นแบบคำขอ", answer)
+
+    async def test_failed_rewrite_keeps_unrelated_question_standalone(self):
+        question = "เทศบาลเปิดกี่โมง"
+        with (
+            patch.object(chat, "generate_answer", AsyncMock(return_value="")),
+            patch.object(chat, "embed_text", AsyncMock(return_value=[0.2])) as embed,
+            patch.object(chat, "_match", return_value=[]),
+        ):
+            await chat._answer(question, [{"role": "user", "content": "ขออนุญาตก่อสร้างอาคารที่ไหน"}])
+        embed.assert_awaited_once_with(question)
+
+    async def test_numeric_claim_requires_evidence_within_excerpt_shown_to_model(self):
+        matches = [{"content": "ข้อความทั่วไป" * chat.DOCUMENT_EXCERPT_LIMIT + "\nค่าธรรมเนียม 200 บาท"}]
+        with patch.object(chat, "_add_metadata") as enrich:
+            answer, _ = await chat._validated_answer(
+                '{"answer":"ค่าธรรมเนียม 200 บาท","sources":[1]}', matches,
+            )
+        self.assertEqual(answer, chat.NO_MATCH)
+        enrich.assert_not_called()
+
     def test_private_followup_accepts_recent_messages_without_database_access(self):
         app = FastAPI()
         app.state.limiter = chat.limiter

@@ -63,19 +63,19 @@
             <p class="history-feedback" id="history-feedback" role="status"></p>
         </div>
 
-        <div id="cookieBanner" class="cookie-banner" style="display:none;">
+        <dialog id="cookieBanner" class="cookie-banner" aria-labelledby="history-dialog-title">
             <div class="cookie-inner">
                 <div>
-                    <p>เก็บประวัติการสนทนาไว้เปิดดูภายหลังไหม?</p>
+                    <h2 id="history-dialog-title">เก็บประวัติการสนทนาไหม?</h2>
+                    <p>หากเก็บประวัติ คุณจะกลับมาเปิดดูแชตนี้ได้ การตั้งค่านี้มีผลกับข้อความถัดไป</p>
                     <p class="history-choice" id="current-history-choice"></p>
                 </div>
                 <div class="cookie-actions">
-                    <button class="btn-decline" type="button" onclick="closeHistorySettings()">ปิด</button>
-                    <button class="btn-decline" type="button" onclick="declineCookies()">ไม่เก็บ</button>
+                    <button class="btn-decline" type="button" onclick="declineCookies()" autofocus>ไม่เก็บประวัติ</button>
                     <button class="btn-accept" type="button" onclick="acceptCookies()">เก็บประวัติ</button>
                 </div>
             </div>
-        </div>
+        </dialog>
 
         <div class="toggle-quick">
             <button type="button" onclick="toggleQuick()" id="toggleQuickBtn" aria-controls="quickActions" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="/icons.svg#menu"></use></svg><span>เมนูด่วน</span><svg class="icon quick-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
@@ -170,6 +170,7 @@ function appendAnswer(container, value) {
     }
 
     function addMessage(text, sender, timestamp) {
+        chat.querySelector(".welcome-chip")?.remove();
         const row = document.createElement("div");
         row.className = `msg-row ${sender}${sender === lastSender ? ' no-avatar' : ''}`;
 
@@ -178,8 +179,7 @@ function appendAnswer(container, value) {
         avatar.append(document.querySelector(".header-avatar svg").cloneNode(true));
 
         const col = document.createElement("div");
-        col.style.cssText = "display:flex;flex-direction:column;max-width:72%";
-        if (sender === "user") col.style.alignItems = "flex-end";
+        col.className = "message-content";
 
         const bubble = document.createElement("div");
         bubble.className = "bubble";
@@ -210,6 +210,11 @@ function appendAnswer(container, value) {
     let sending = false;
     let failedQuestion = null;
     let activeChatRequest = null;
+    const recentTurns = [];
+    function rememberTurn(role, content) {
+        recentTurns.push({ role, content: Array.from(content).slice(0, 800).join("") });
+        if (recentTurns.length > 4) recentTurns.shift();
+    }
     let historyChoice = null;
     try {
         historyChoice = localStorage.getItem("chat_cookie_consent");
@@ -244,7 +249,11 @@ function appendAnswer(container, value) {
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
                 signal: request.signal,
-                body: JSON.stringify({ message: text, no_save: noSave })
+                body: JSON.stringify({
+                    message: text,
+                    no_save: noSave,
+                    ...(noSave && recentTurns.length ? { recent: recentTurns } : {}),
+                })
             });
             const data = await res.json();
             if (request.signal.aborted) throw new Error("Stopped");
@@ -256,6 +265,8 @@ function appendAnswer(container, value) {
                 throw new Error(typeof data.error === "string" ? data.error : "ส่งคำถามไม่สำเร็จ");
             }
             addMessage(data.answer, "bot");
+            rememberTurn("user", text);
+            rememberTurn("assistant", data.answer);
             showRequestStatus(
                 data.history_saved === false ? "notice" : "idle",
                 data.history_saved === false ? "ได้รับคำตอบแล้ว แต่ยังบันทึกประวัติไม่ได้" : ""
@@ -316,10 +327,15 @@ function appendAnswer(container, value) {
     function setHistorySettings(open) {
         document.getElementById("current-history-choice").textContent = historyChoice === "accepted"
             ? "ค่าปัจจุบัน: เก็บประวัติ"
-            : "ค่าปัจจุบัน: ไม่เก็บประวัติ";
-        document.getElementById("cookieBanner").style.display = open ? "block" : "none";
+            : historyChoice === "declined" ? "ค่าปัจจุบัน: ไม่เก็บประวัติ" : "";
+        const dialog = document.getElementById("cookieBanner");
+        if (open && !dialog.open) dialog.showModal();
+        if (!open && dialog.open) dialog.close();
         document.getElementById("history-settings").setAttribute("aria-expanded", String(open));
     }
+    document.getElementById("cookieBanner").addEventListener("close", () => {
+        document.getElementById("history-settings").setAttribute("aria-expanded", "false");
+    });
     function toggleHistorySettings() {
         setHistorySettings(document.getElementById("history-settings").getAttribute("aria-expanded") !== "true");
     }
@@ -338,6 +354,7 @@ function appendAnswer(container, value) {
     }
     function acceptCookies() {
         saveHistoryChoice("accepted");
+        if (!chat.querySelector(".msg-row")) loadHistory();
     }
     function declineCookies() {
         saveHistoryChoice("declined");
@@ -364,18 +381,16 @@ function appendAnswer(container, value) {
             if (data.history && data.history.length && !chat.querySelector(".msg-row")
                 && historyChoice === "accepted") {
                 chat.replaceChildren(status);
-                data.history.forEach(m => addMessage(m.content, m.role === "user" ? "user" : "bot", m.created_at));
+                for (const message of data.history) {
+                    if (typeof message.content !== "string" || !["user", "assistant"].includes(message.role)) continue;
+                    addMessage(message.content, message.role === "user" ? "user" : "bot", message.created_at);
+                    rememberTurn(message.role, message.content);
+                }
             }
         } catch {
             status.textContent = "โหลดประวัติไม่ได้ คุณยังส่งคำถามใหม่ได้";
         }
     }
-
-    window.addEventListener("pagehide", (e) => {
-        if (!e.persisted) {
-            document.cookie = "session_id=; Max-Age=0; path=/; SameSite=None; Secure";
-        }
-    });
 
     const mobileSidebar = window.matchMedia("(max-width: 768px)");
 
@@ -398,15 +413,14 @@ function appendAnswer(container, value) {
     }
 
     window.onload = () => {
-        checkCookieConsent();
-        loadHistory();
-
         // ปิด sidebar อัตโนมัติตอนเปิดหน้าบนมือถือ
         setSidebar(!mobileSidebar.matches);
+        checkCookieConsent();
+        loadHistory();
     };
     mobileSidebar.addEventListener("change", () => setSidebar(!mobileSidebar.matches));
     document.addEventListener("keydown", event => {
-        if (event.key !== "Escape") return;
+        if (event.key !== "Escape" || document.getElementById("cookieBanner").open) return;
         const toggle = document.querySelector(".toggle-sidebar");
         if (mobileSidebar.matches && toggle.getAttribute("aria-expanded") === "true") {
             setSidebar(false);
