@@ -14,7 +14,7 @@ from ai import AI_PROVIDER, AIQuotaExceeded, AIUnavailable, embed_text, generate
 from config import COOKIE_SAMESITE, COOKIE_SECURE
 from database import supabase
 from middleware import limiter
-from municipal_info import COMPLAINT_URL, lookup as lookup_official
+from municipal_info import COMPLAINT_URL, lookup as lookup_official, lookup_complaint
 from routes.usage import record_usage
 from usage_counter import generation_usage
 
@@ -313,6 +313,11 @@ async def _answer(question: str, history: list) -> tuple[str, str]:
         return "สอบถามข้อมูลหรือบริการของเทศบาลเมืองศิลาได้เลยค่ะ", "อื่น ๆ"
     if re.fullmatch(r"(?:ช่องทาง|แจ้งเรื่อง)?(?:ร้องเรียน|ร้องทุกข์)(?:ที่ไหน|อย่างไร|ยังไง)?[ ?？]*", question):
         return f"ดูช่องทางแจ้งเรื่องได้ที่ [ร้องเรียนและร้องทุกข์]({COMPLAINT_URL}) ของเทศบาลเมืองศิลาค่ะ", "ร้องเรียน"
+    complaint_reference = lookup_complaint(
+        question, [row["content"] for row in history[-6:] if row["role"] == "user"],
+    )
+    if complaint_reference is not None:
+        return complaint_reference[0], "ร้องเรียน"
     if DIRECT_CONTACT.fullmatch("".join(question.split())):
         official = _official_answer(question)
         if official is not None:

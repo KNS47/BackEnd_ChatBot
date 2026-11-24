@@ -18,6 +18,47 @@ from routes import chat
 
 
 class ChatQualityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_complaint_guide_faq_answers_without_ai(self):
+        for question, expected in (
+            ("ถ้าจะไปยื่นเรื่องร้องทุกข์ที่สำนักงาน ไปวันไหน เวลาใด", "08.30–16.30"),
+            ("ร้องเรียนต้องจ่ายค่าธรรมเนียมไหม", "ไม่มีค่าธรรมเนียม"),
+            ("ถ้ากรอกแบบฟอร์มร้องเรียน ต้องแนบอะไร", "สำเนาบัตรประจำตัวประชาชน"),
+            ("เทศบาลรับประกันว่าจะจัดการเรื่องร้องเรียนเสร็จภายใน 15 วันไหม", "ไม่ได้กำหนดว่าเรื่องจะต้องแก้ไขเสร็จภายใน 15 วัน"),
+        ):
+            with self.subTest(question=question), patch.object(chat, "embed_text", AsyncMock()) as embed:
+                answer, category = await chat._answer(question, [])
+                self.assertIn(expected, answer)
+                self.assertIn("19716284912632022.pdf#page=1", answer)
+                self.assertEqual(category, "ร้องเรียน")
+                embed.assert_not_awaited()
+
+    async def test_complaint_followup_requires_explicit_latest_user_topic(self):
+        complaint = {"role": "user", "content": "แจ้งเรื่องร้องเรียนได้ที่ไหน"}
+        history = [
+            complaint,
+            {"role": "assistant", "content": "ไปที่สำนักงาน"},
+            {"role": "user", "content": "แล้วเสียค่าธรรมเนียมไหม"},
+        ]
+        with patch.object(chat, "embed_text", AsyncMock()) as embed:
+            answer, _ = await chat._answer("วันเสาร์เปิดไหม", history)
+            self.assertIn("วันจันทร์ถึงวันศุกร์", answer)
+            embed.assert_not_awaited()
+
+        for other_history in (
+            [],
+            [{"role": "assistant", "content": "ร้องเรียนเทศบาล"}],
+            [complaint, {"role": "user", "content": "ขออนุญาตก่อสร้างทำอย่างไร"}],
+            [{"role": "user", "content": "ร้องเรียนการทุจริตทำอย่างไร"}],
+        ):
+            with (
+                self.subTest(history=other_history),
+                patch.object(chat, "generate_answer", AsyncMock(return_value="")),
+                patch.object(chat, "embed_text", AsyncMock(return_value=[0.1])),
+                patch.object(chat, "_match", return_value=[]),
+            ):
+                answer, _ = await chat._answer("แล้วเสียค่าธรรมเนียมไหม", other_history)
+                self.assertEqual(answer, chat.NO_MATCH)
+
     async def test_known_contact_takes_no_ai_or_database_calls(self):
         with patch.object(chat, "embed_text", AsyncMock()) as embed, patch.object(chat, "_match") as match:
             answer, _ = await chat._answer("ติดต่อเทศบาลเมืองศิลาได้ทางไหนบ้าง", [])
