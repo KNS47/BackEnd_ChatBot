@@ -67,12 +67,12 @@
             <div class="cookie-inner">
                 <div>
                     <h2 id="history-dialog-title">เก็บประวัติการสนทนาไหม?</h2>
-                    <p>หากเก็บประวัติ คุณจะกลับมาเปิดดูแชตนี้ได้ การตั้งค่านี้มีผลกับข้อความถัดไป</p>
+                    <p>กดตกลงเพื่อเก็บประวัติไว้เปิดดูภายหลัง ถ้าไม่ตกลง คุณยังถามต่อได้ในหน้าแชตนี้จนกว่าจะปิดหรือรีเฟรชหน้า</p>
                     <p class="history-choice" id="current-history-choice"></p>
                 </div>
                 <div class="cookie-actions">
-                    <button class="btn-decline" type="button" onclick="declineCookies()" autofocus>ไม่เก็บประวัติ</button>
-                    <button class="btn-accept" type="button" onclick="acceptCookies()">เก็บประวัติ</button>
+                    <button class="btn-decline" type="button" onclick="declineCookies()" autofocus>ไม่ตกลง</button>
+                    <button class="btn-accept" type="button" onclick="acceptCookies()">ตกลง</button>
                 </div>
             </div>
         </dialog>
@@ -213,7 +213,7 @@ function appendAnswer(container, value) {
     const recentTurns = [];
     function rememberTurn(role, content) {
         recentTurns.push({ role, content: Array.from(content).slice(0, 800).join("") });
-        if (recentTurns.length > 4) recentTurns.shift();
+        if (recentTurns.length > 6) recentTurns.shift();
     }
     let historyChoice = null;
     try {
@@ -252,7 +252,7 @@ function appendAnswer(container, value) {
                 body: JSON.stringify({
                     message: text,
                     no_save: noSave,
-                    ...(noSave && recentTurns.length ? { recent: recentTurns } : {}),
+                    ...(recentTurns.length ? { recent: recentTurns } : {}),
                 })
             });
             const data = await res.json();
