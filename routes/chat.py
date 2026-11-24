@@ -29,7 +29,7 @@ NO_MATCH = (
 UNAVAILABLE = "ระบบตอบคำถามขัดข้องชั่วคราว กรุณาลองอีกครั้งค่ะ"
 URL_PATTERN = re.compile(r"https?://[^\s<>()\]\[\x22']+", re.IGNORECASE)
 FOLLOWUP = re.compile(
-    r"^(แล้ว|ถ้า|ต้องใช้|ต้องเตรียม|ใช้เวลา|มีค่าใช้จ่าย)|"
+    r"^(แล้ว|ถ้า|ต้องใช้|ต้องเตรียม|ใช้เอกสาร|ใช้เวลา|มีค่าใช้จ่าย|กี่|เท่าไ)|"
     r"(?:ที่ว่า|ที่กล่าวถึง|นั้น|อันนี้|ล่ะ|เหรอ|ได้ไหม)[?？ ]*$"
 )
 CONTEXT_DEPENDENT = re.compile(
@@ -39,6 +39,9 @@ CONTEXT_DEPENDENT = re.compile(
     r"(?:ที่กล่าวถึง|ขั้นตอนนี้|เรื่องนี้|แบบฟอร์มนี้|ที่ว่า)"
 )
 DOCUMENT_EXCERPT_LIMIT = 2200
+# Very short questions ("กี่บาท", "ที่ไหน") rarely stand alone; longer ones only get
+# rewritten when FOLLOWUP/CONTEXT_DEPENDENT matches, saving an AI call per question.
+SHORT_FOLLOWUP_CHARS = 12
 GREETING = re.compile(r"(?:สวัสดี|หวัดดี|ขอบคุณ|ขอบใจ|บาย|hello|hi|thanks)(?:ครับ|ค่ะ|คะ|จ้า)?[ !.]*", re.IGNORECASE)
 DIRECT_CONTACT = re.compile(
     r"(?:ขอ)?(?:เบอร์(?:โทร)?(?:ของ)?เทศบาล|ที่อยู่เทศบาล|ติดต่อเทศบาล)(?:เมืองศิลา)?"
@@ -317,7 +320,7 @@ async def _answer(question: str, history: list) -> tuple[str, str]:
 
     context = [{"role": row["role"], "content": row["content"][:800]} for row in history[-6:]]
     lookup = question
-    if context and (len(question) <= 30 or FOLLOWUP.search(question) or CONTEXT_DEPENDENT.search(question)):
+    if context and (len(question) <= SHORT_FOLLOWUP_CHARS or FOLLOWUP.search(question) or CONTEXT_DEPENDENT.search(question)):
         lookup = _fallback_search_question(question, context)
         try:
             rewritten = await asyncio.wait_for(generate_answer(
@@ -422,7 +425,9 @@ async def chat(request: Request, background_tasks: BackgroundTasks, session_id: 
     try:
         history = []
         recent = body.get("recent")
-        if no_save and isinstance(recent, list):
+        # Recent turns from the open page: the only context in no-save mode, and the
+        # fallback in saved mode when stored history cannot be read.
+        if isinstance(recent, list):
             history = [
                 {"role": row["role"], "content": row["content"][:800]}
                 for row in recent[-6:]
@@ -432,9 +437,17 @@ async def chat(request: Request, background_tasks: BackgroundTasks, session_id: 
             ]
         session_id = None if no_save else _valid_session(session_id)
         if session_id:
-            history, expired = await run_in_threadpool(_history, session_id, 6)
-            if expired or not history:
-                session_id = None
+            try:
+                stored, expired = await run_in_threadpool(_history, session_id, 6)
+            except Exception as exc:
+                logger.warning("History read failed: %s", type(exc).__name__)
+            else:
+                if expired:
+                    history = []
+                elif stored:
+                    history = stored
+                if not stored:
+                    session_id = None
         answer, category = await _answer(question, history)
     except AIQuotaExceeded:
         return JSONResponse(

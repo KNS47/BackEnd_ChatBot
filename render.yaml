@@ -27,3 +27,5 @@ services:
         value: "true"
       - key: COOKIE_SAMESITE
         value: lax
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"

@@ -231,6 +231,37 @@ class ChatQualityTests(unittest.IsolatedAsyncioTestCase):
         analytics.assert_not_called()
         usage.assert_called_once_with(1, 0)
 
+    def test_saved_mode_uses_recent_messages_when_history_read_fails(self):
+        app = FastAPI()
+        app.state.limiter = chat.limiter
+        app.include_router(chat.router)
+        session = "11111111-1111-1111-1111-111111111111"
+        recent = [{"role": "user", "content": "ขออนุญาตก่อสร้างอาคารที่ไหน"}]
+        with (
+            TestClient(app) as client,
+            patch.object(chat, "_answer", AsyncMock(return_value=("คำตอบ", "บริการ"))) as answer,
+            patch.object(chat, "_history", side_effect=RuntimeError("database unavailable")),
+            patch.object(chat, "_save_messages", return_value=session) as save,
+            patch.object(chat, "_record_analytics"),
+            patch.object(chat, "record_usage"),
+        ):
+            client.cookies.set("session_id", session)
+            result = client.post("/chat", json={"message": "ใช้เวลากี่วัน", "no_save": False, "recent": recent})
+        self.assertEqual(result.json(), {"answer": "คำตอบ"})
+        answer.assert_awaited_once_with("ใช้เวลากี่วัน", recent)
+        self.assertEqual(save.call_args.args[0], session)
+
+    async def test_standalone_question_skips_rewrite_call(self):
+        question = "ภาษีป้ายต้องจ่ายที่ไหน"
+        with (
+            patch.object(chat, "generate_answer", AsyncMock(return_value="")) as generate,
+            patch.object(chat, "embed_text", AsyncMock(return_value=[0.2])) as embed,
+            patch.object(chat, "_match", return_value=[]),
+        ):
+            await chat._answer(question, [{"role": "user", "content": "ขออนุญาตก่อสร้างอาคารที่ไหน"}])
+        generate.assert_not_awaited()
+        embed.assert_awaited_once_with(question)
+
     async def test_gemini_pool_reuse_and_model_fallback(self):
         requests = []
 
