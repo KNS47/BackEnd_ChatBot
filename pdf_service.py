@@ -18,6 +18,7 @@ BUCKET_NAME = os.getenv("SUPABASE_BUCKET", "pdfs").strip() or "pdfs"
 
 # PyMuPDF does not support simultaneous calls from multiple threads.
 _pdf_lock = Lock()
+MAX_OCR_EDGE = 4000
 
 
 class PdfError(Exception):
@@ -39,11 +40,54 @@ def _ocr_page(page: pymupdf.Page) -> str:
 
     # Keep 300 dpi for ordinary documents and bound the raster size for oversized pages.
     longest_edge = max(page.rect.width, page.rect.height, 1)
-    dpi = max(1, min(300, int(4000 * 72 / longest_edge)))
+    dpi = max(1, min(300, int(MAX_OCR_EDGE * 72 / longest_edge)))
+    text = _recognize(page, dpi, tessdata)
+    line_lengths = _ocr_line_lengths(text)
+    # A sideways scan commonly becomes a column of one- to four-character
+    # fragments. Retry those pages only and require a strong line-length gain.
+    if len(line_lengths) < 6 or sorted(line_lengths)[len(line_lengths) // 2] > 4:
+        return text
+
+    best_score = _ocr_score(text)
+    minimum_gain = max(12, max(line_lengths) * 3)
+    for rotation in (90, 270):
+        candidate = _recognize_rotated(page, dpi, rotation, tessdata)
+        candidate_score = _ocr_score(candidate)
+        if candidate_score >= minimum_gain and candidate_score > best_score:
+            text, best_score = candidate, candidate_score
+    return text
+
+
+def _recognize(page: pymupdf.Page, dpi: int, tessdata: str) -> str:
     text_page = page.get_textpage_ocr(
         dpi=dpi, language="tha+eng", full=True, tessdata=tessdata
     )
     return page.get_text(textpage=text_page, sort=True).strip()
+
+
+def _ocr_line_lengths(text: str) -> list[int]:
+    return [sum(char.isalnum() for char in line) for line in text.splitlines() if line.strip()]
+
+
+def _ocr_score(text: str) -> int:
+    line_lengths = _ocr_line_lengths(text)
+    # Upside-down recognition can also produce long strings but tends to
+    # interleave digits with letters. Prefer more coherent text.
+    number_switches = sum(
+        left.isalnum() and right.isalnum() and left.isdecimal() != right.isdecimal()
+        for left, right in zip(text, text[1:])
+    )
+    return max(line_lengths, default=0) - 2 * number_switches
+
+
+def _recognize_rotated(page: pymupdf.Page, dpi: int, rotation: int, tessdata: str) -> str:
+    scale = dpi / 72
+    image = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale).prerotate(rotation), colorspace=pymupdf.csGRAY)
+    with pymupdf.open() as rotated:
+        target = rotated.new_page(width=image.width / scale, height=image.height / scale)
+        target.insert_image(target.rect, pixmap=image)
+        del image
+        return _recognize(target, dpi, tessdata)
 
 
 def extract_pages(file_bytes: bytes) -> list[tuple[int, str]]:

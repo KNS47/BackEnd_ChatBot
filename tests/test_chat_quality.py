@@ -58,6 +58,20 @@ class ChatQualityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(answer, chat.NO_MATCH)
         enrich.assert_not_called()
 
+    async def test_numeric_value_must_appear_in_selected_evidence(self):
+        matches = [{"content": "เปิด 08:45 น. https://www.sila-kk.go.th/news/500"}]
+        answer, _ = await chat._validated_answer(
+            '{"answer":"ค่าธรรมเนียม 500 บาท","sources":[1]}', matches,
+        )
+        self.assertEqual(answer, chat.NO_MATCH)
+
+    async def test_numeric_thai_digits_and_list_markers_are_accepted(self):
+        matches = [{"content": "ค่าธรรมเนียม ๑,๒๕๐ บาท", "category": "ค่าธรรมเนียม"}]
+        answer, _ = await chat._validated_answer(
+            json.dumps({"answer": "1. ชำระ 1250 บาท", "sources": [1]}), matches,
+        )
+        self.assertIn("1250 บาท", answer)
+
     async def test_recent_context_resolves_followup(self):
         history = [{"role": "user", "content": "ขออนุญาตก่อสร้างอาคารที่ไหน"}]
         answer_json = '{"answer":"ยื่นที่กองช่าง","sources":[1]}'
